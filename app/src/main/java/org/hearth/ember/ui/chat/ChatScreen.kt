@@ -49,6 +49,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Videocam
@@ -147,12 +148,14 @@ fun ChatScreen(nav: NavHostController, roomId: String, embedded: Boolean = false
     var draft by remember(roomId) { mutableStateOf("") }
     var replyTo by remember(roomId) { mutableStateOf<Message?>(null) }
     var editing by remember(roomId) { mutableStateOf<Message?>(null) }
-    var actionsFor by remember { mutableStateOf<Message?>(null) }
-    // Several messages picked at once (a long press starts it; then a tap adds or removes one).
-    var multi by remember(roomId) { mutableStateOf(setOf<String>()) }
+    // The messages picked: a tap or a long press picks one (the top bar then offers what you can do with it, and a bar of reactions floats
+    // beside it); with others picked already, a tap adds or removes it.
+    var picked by remember(roomId) { mutableStateOf(listOf<String>()) }
     var confirmDelete by remember { mutableStateOf<List<Message>?>(null) }
     var forwardingAll by remember { mutableStateOf<List<Message>?>(null) }
-    androidx.activity.compose.BackHandler(enabled = multi.isNotEmpty()) { multi = emptySet() }
+    var videoViewer by remember { mutableStateOf<Attachment?>(null) }
+    var stickerSheet by remember { mutableStateOf<Attachment?>(null) }
+    androidx.activity.compose.BackHandler(enabled = picked.isNotEmpty()) { picked = emptyList() }
     var actionAnchor by remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
     var emojiFor by remember { mutableStateOf<Message?>(null) }
     var emojiForDraft by remember { mutableStateOf(false) }
@@ -192,6 +195,7 @@ fun ChatScreen(nav: NavHostController, roomId: String, embedded: Boolean = false
 
     // The list is newest-first (reverse layout), so index 0 is the bottom.
     val reversed = remember(messages) { messages.asReversed() }
+    val pickedMessages = remember(messages, picked) { picked.mapNotNull { id -> messages.firstOrNull { it.id == id } } }
     val atBottom by remember { derivedStateOf { listState.firstVisibleItemIndex <= 1 } }
     LaunchedEffect(reversed.firstOrNull()?.id) { if (atBottom) listState.animateScrollToItem(0) }
     LaunchedEffect(listState, reversed.size) {
@@ -209,11 +213,44 @@ fun ChatScreen(nav: NavHostController, roomId: String, embedded: Boolean = false
         }
     }
 
+    // Pictures and videos wait in a preview (with a caption box) before they go: from the gallery, or just taken with the camera.
+    var outgoing by remember(roomId) { mutableStateOf<List<android.net.Uri>?>(null) }
     val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(10)) { uris ->
-        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+        if (uris.isNotEmpty()) outgoing = uris
+    }
+    var captureTarget by remember { mutableStateOf<android.net.Uri?>(null) }
+    var wantVideo by remember { mutableStateOf(false) }
+    val takePhoto = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+        val target = captureTarget
+        if (ok && target != null) outgoing = listOf(target)
+    }
+    val takeVideo = rememberLauncherForActivityResult(ActivityResultContracts.CaptureVideo()) { ok ->
+        val target = captureTarget
+        if (ok && target != null) outgoing = listOf(target)
+    }
+    fun launchCapture(video: Boolean) {
+        val dir = File(context.cacheDir, "shared").also { it.mkdirs() }
+        val file = File(dir, "capture-" + System.currentTimeMillis() + if (video) ".mp4" else ".jpg")
+        val uri = FileProvider.getUriForFile(context, context.packageName + ".files", file)
+        captureTarget = uri
+        if (video) takeVideo.launch(uri) else takePhoto.launch(uri)
+    }
+    // The camera app can only be asked for a picture once this app (which lists the camera in its manifest) has been allowed to use it.
+    val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) launchCapture(wantVideo) else notice = "Allow the camera to take photos and videos."
+    }
+    fun capture(video: Boolean) {
+        wantVideo = video
+        if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED) launchCapture(video)
+        else cameraPermission.launch(android.Manifest.permission.CAMERA)
+    }
+    fun sendFavourite(file: File, mime: String) {
+        emojiForDraft = false
         scope.launch {
             sending = true
-            for (uri in uris) runCatching { app.repo.sendUri(roomId, uri) }.onFailure { notice = it.message }
+            runCatching { app.repo.sendBytes(roomId, file.readBytes(), file.name, mime) }
+                .onSuccess { app.sounds.play(org.hearth.ember.notify.SoundPlayer.Kind.Out) }
+                .onFailure { notice = it.message }
             sending = false
         }
     }
@@ -269,7 +306,20 @@ fun ChatScreen(nav: NavHostController, roomId: String, embedded: Boolean = false
     }
 
     Column(Modifier.fillMaxSize().offset(x = shake.value.dp).background(EmberTheme.colors.chatBackground).imePadding(), horizontalAlignment = Alignment.CenterHorizontally) {
-        TopAppBar(
+        if (pickedMessages.isNotEmpty()) SelectionBar(
+            messages = pickedMessages, meId = meId,
+            onClose = { picked = emptyList() },
+            onReply = { replyTo = pickedMessages.first(); editing = null; picked = emptyList() },
+            onCopy = {
+                val text = pickedMessages.mapNotNull { m -> app.repo.textOf(roomId, m.body)?.takeIf { it.isNotBlank() } }.joinToString("\n")
+                (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("messages", text))
+                picked = emptyList()
+            },
+            onForward = { forwardingAll = pickedMessages },
+            onDelete = { confirmDelete = pickedMessages },
+            onPin = { val m = pickedMessages.first(); picked = emptyList(); scope.launch { runCatching { app.repo.pin(m) } } },
+            onEdit = { val m = pickedMessages.first(); picked = emptyList(); editing = m; replyTo = null; draft = m.body },
+        ) else TopAppBar(
             navigationIcon = { if (!embedded) IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
             title = {
                 if (room != null) Row(Modifier.clickable { nav.navigate("room/$roomId") }, verticalAlignment = Alignment.CenterVertically) {
@@ -328,20 +378,6 @@ fun ChatScreen(nav: NavHostController, roomId: String, embedded: Boolean = false
         }
 
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
-            if (multi.isNotEmpty()) Box(Modifier.fillMaxSize().zIndex(2f).padding(bottom = 12.dp), contentAlignment = Alignment.BottomCenter) {
-                val picked = messages.filter { it.id in multi }
-                BulkPill(
-                    count = multi.size,
-                    onClose = { multi = emptySet() },
-                    onCopy = {
-                        val text = picked.mapNotNull { m -> app.repo.textOf(roomId, m.body)?.takeIf { it.isNotBlank() } }.joinToString("\n")
-                        (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("messages", text))
-                        multi = emptySet()
-                    },
-                    onForward = { forwardingAll = picked },
-                    onDelete = { confirmDelete = picked },
-                )
-            }
             if (room == null) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { androidx.compose.material3.CircularProgressIndicator() }
             } else {
@@ -357,14 +393,17 @@ fun ChatScreen(nav: NavHostController, roomId: String, embedded: Boolean = false
                             MessageBubble(
                                 message = message, room = room, meId = meId, firstOfGroup = firstOfGroup, lastOfGroup = lastOfGroup,
                                 highlighted = highlight == message.id,
-                                selected = message.id in multi || actionsFor?.id == message.id,
+                                selected = message.id in picked, selecting = picked.isNotEmpty(),
                                 onSelect = { rect ->
-                                    if (multi.isNotEmpty()) multi = if (message.id in multi) multi - message.id else multi + message.id
-                                    else { actionAnchor = rect; actionsFor = message }
+                                    picked = if (message.id in picked) picked - message.id else picked + message.id
+                                    if (picked.size == 1) actionAnchor = rect
                                 },
                                 onReply = { replyTo = message; editing = null },
-                                onLongPress = { _ -> actionsFor = null; multi = multi + message.id },
+                                onLongPress = { rect -> if (message.id !in picked) picked = picked + message.id; if (picked.size == 1) actionAnchor = rect },
                                 onOpenImage = { viewer = it },
+                                onOpenVideo = { videoViewer = it },
+                                onOpenSticker = { stickerSheet = it },
+                                onForward = { forwardingAll = listOf(message) },
                                 onOpenFile = { a -> scope.launch { openFile(context, a) { notice = it } } },
                                 onJumpTo = { id ->
                                     val target = reversed.indexOfFirst { it.id == id }
@@ -416,7 +455,7 @@ fun ChatScreen(nav: NavHostController, roomId: String, embedded: Boolean = false
             Composer(
                 text = draft, onText = { draft = it }, enterSends = enterSends, sending = sending,
                 onSend = { send() },
-                onEmoji = { emojiForDraft = true }, onNudge = sendNudge,
+                onEmoji = { emojiForDraft = true }, onNudge = sendNudge, onCamera = { capture(it) },
                 onRecord = {
                     if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) startRecording()
                     else micPermission.launch(android.Manifest.permission.RECORD_AUDIO)
@@ -428,28 +467,41 @@ fun ChatScreen(nav: NavHostController, roomId: String, embedded: Boolean = false
         }
     }
 
-    if (emojiForDraft) EmojiSheet(onDismiss = { emojiForDraft = false }) { e -> draft += e }
-    emojiFor?.let { m -> EmojiSheet(onDismiss = { emojiFor = null }) { e -> emojiFor = null; scope.launch { runCatching { reactWith(m, e) } } } }
-    actionsFor?.let { m ->
-        MessageActions(
-            message = m, mine = m.userId == meId,
-            onDismiss = { actionsFor = null },
-            onReact = { emoji -> actionsFor = null; scope.launch { runCatching { reactWith(m, emoji) } } },
-            onReply = { actionsFor = null; replyTo = m; editing = null },
-            onCopy = {
-                actionsFor = null
-                (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("message", m.body))
+    if (emojiForDraft) EmojiSheet(
+        onDismiss = { emojiForDraft = false },
+        onSticker = { f -> sendFavourite(f, "image/webp") }, onGif = { f -> sendFavourite(f, "image/gif") },
+    ) { e -> draft += e }
+    outgoing?.let { list ->
+        MediaPreview(
+            list, onCancel = { outgoing = null },
+            onSend = { caption ->
+                outgoing = null
+                scope.launch {
+                    sending = true
+                    for ((i, uri) in list.withIndex()) {
+                        runCatching { app.repo.sendUri(roomId, uri, if (i == 0) caption else "") }
+                            .onSuccess { app.sounds.play(org.hearth.ember.notify.SoundPlayer.Kind.Out) }
+                            .onFailure { notice = it.message }
+                    }
+                    sending = false
+                }
             },
-            onEdit = { actionsFor = null; editing = m; replyTo = null; draft = m.body },
-            onDelete = { actionsFor = null; confirmDelete = listOf(m) },
-            onSelectMore = { actionsFor = null; multi = multi + m.id },
-            onPin = { actionsFor = null; scope.launch { runCatching { app.repo.pin(m) } } },
-            onForward = { actionsFor = null; forwarding = m },
-            onMoreReactions = { actionsFor = null; emojiFor = m }, quick = quick, anchor = actionAnchor,
+        )
+    }
+    emojiFor?.let { m -> EmojiSheet(onDismiss = { emojiFor = null }) { e -> emojiFor = null; scope.launch { runCatching { reactWith(m, e) } } } }
+    // One message picked: its reactions float beside it (more than one picked: nothing floats, the top bar handles them).
+    pickedMessages.singleOrNull()?.takeIf { it.deletedAt == null }?.let { m ->
+        ReactionBar(
+            mine = m.userId == meId, quick = quick, anchor = actionAnchor,
+            onReact = { emoji -> picked = emptyList(); scope.launch { runCatching { reactWith(m, emoji) } } },
+            onMore = { picked = emptyList(); emojiFor = m },
         )
     }
 
-    // The bulk pill is drawn over the list (see the box above); these are what its buttons lead to.
+    stickerSheet?.let { a -> StickerSheet(a, roomId, onDismiss = { stickerSheet = null }) }
+    videoViewer?.let { VideoViewer(it, roomId) { videoViewer = null } }
+
+    // What the top bar's buttons lead to.
     confirmDelete?.let { list ->
         val mineOnly = list.filter { it.userId == (app.repo.me.value?.id ?: "") }
         androidx.compose.material3.AlertDialog(
@@ -458,7 +510,7 @@ fun ChatScreen(nav: NavHostController, roomId: String, embedded: Boolean = false
             text = { Text("They are removed for everyone and cannot be brought back." + if (mineOnly.size < list.size) " Messages from other people stay: only yours can be deleted." else "") },
             confirmButton = {
                 androidx.compose.material3.TextButton(onClick = {
-                    confirmDelete = null; multi = emptySet()
+                    confirmDelete = null; picked = emptyList()
                     scope.launch { for (m in mineOnly) runCatching { app.repo.delete(m) }.onFailure { notice = it.message } }
                 }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
             },
@@ -467,7 +519,7 @@ fun ChatScreen(nav: NavHostController, roomId: String, embedded: Boolean = false
     }
     forwardingAll?.let { list ->
         ForwardSheet(list.first(), onDismiss = { forwardingAll = null }) { target ->
-            forwardingAll = null; multi = emptySet()
+            forwardingAll = null; picked = emptyList()
             scope.launch { for (m in list) runCatching { app.repo.forward(m, target) }.onFailure { notice = it.message } }
         }
     }
@@ -506,19 +558,15 @@ private fun EncryptedNotice() {
 @Composable
 private fun Composer(
     text: String, onText: (String) -> Unit, enterSends: Boolean, sending: Boolean, onSend: () -> Unit, onEmoji: () -> Unit, onNudge: () -> Unit, onRecord: () -> Unit,
-    attachMenu: Boolean, onAttachMenu: (Boolean) -> Unit, onPhoto: () -> Unit, onFile: () -> Unit,
+    attachMenu: Boolean, onAttachMenu: (Boolean) -> Unit, onPhoto: () -> Unit, onFile: () -> Unit, onCamera: (video: Boolean) -> Unit,
 ) {
+    var cameraMenu by remember { mutableStateOf(false) }
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
     Row(Modifier.widthIn(max = 880.dp).fillMaxWidth().navigationBarsPadding().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.Bottom) {
         Surface(shape = RoundedCornerShape(26.dp), color = MaterialTheme.colorScheme.surface, shadowElevation = 1.dp, modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.Bottom) {
-                IconButton(onClick = onEmoji) { Icon(Icons.Filled.EmojiEmotions, "Emoji", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
-                Box {
-                    IconButton(onClick = { onAttachMenu(true) }) { Icon(Icons.Filled.Add, "Attach", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
-                    DropdownMenu(expanded = attachMenu, onDismissRequest = { onAttachMenu(false) }) {
-                        DropdownMenuItem(text = { Text("Photos and videos") }, leadingIcon = { Icon(Icons.Filled.PhotoLibrary, null) }, onClick = onPhoto)
-                        DropdownMenuItem(text = { Text("File") }, leadingIcon = { Icon(Icons.Filled.AttachFile, null) }, onClick = onFile)
-                    }
-                }
+                // Emoji, stickers and GIFs live behind the face at the left, as in the messengers you know.
+                IconButton(onClick = onEmoji, modifier = Modifier.size(44.dp)) { Icon(Icons.Filled.EmojiEmotions, "Emoji, stickers and GIFs", tint = muted) }
                 TextField(
                     value = text, onValueChange = onText, placeholder = { Text("Message") },
                     modifier = Modifier.weight(1f).heightIn(max = 160.dp).onPreviewKeyEvent { e ->
@@ -535,8 +583,22 @@ private fun Composer(
                     keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSend = { onSend() }),
                     maxLines = 6,
                 )
-                // Nothing typed yet: the wave sits right in the field, a thumb away, and shakes their chat.
-                if (text.isBlank()) IconButton(onClick = onNudge) { Icon(Icons.Filled.WavingHand, "Nudge", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                Box {
+                    IconButton(onClick = { onAttachMenu(true) }, modifier = Modifier.size(44.dp)) { Icon(Icons.Filled.AttachFile, "Attach", tint = muted) }
+                    DropdownMenu(expanded = attachMenu, onDismissRequest = { onAttachMenu(false) }) {
+                        DropdownMenuItem(text = { Text("Photos and videos") }, leadingIcon = { Icon(Icons.Filled.PhotoLibrary, null) }, onClick = onPhoto)
+                        DropdownMenuItem(text = { Text("File") }, leadingIcon = { Icon(Icons.Filled.AttachFile, null) }, onClick = onFile)
+                        DropdownMenuItem(text = { Text("Nudge") }, leadingIcon = { Icon(Icons.Filled.WavingHand, null) }, onClick = { onAttachMenu(false); onNudge() })
+                    }
+                }
+                // Nothing typed yet: the camera sits in the field, a thumb away.
+                if (text.isBlank()) Box {
+                    IconButton(onClick = { cameraMenu = true }, modifier = Modifier.size(44.dp)) { Icon(Icons.Filled.PhotoCamera, "Camera", tint = muted) }
+                    DropdownMenu(expanded = cameraMenu, onDismissRequest = { cameraMenu = false }) {
+                        DropdownMenuItem(text = { Text("Take a photo") }, leadingIcon = { Icon(Icons.Filled.PhotoCamera, null) }, onClick = { cameraMenu = false; onCamera(false) })
+                        DropdownMenuItem(text = { Text("Record a video") }, leadingIcon = { Icon(Icons.Filled.Videocam, null) }, onClick = { cameraMenu = false; onCamera(true) })
+                    }
+                }
             }
         }
         Spacer(Modifier.width(8.dp))
@@ -549,65 +611,6 @@ private fun Composer(
             Icon(if (hasText) Icons.AutoMirrored.Filled.Send else Icons.Filled.Mic, if (hasText) "Send" else "Record a voice message", tint = MaterialTheme.colorScheme.onPrimary)
         }
     }
-}
-
-/**
- * What you can do with the message you picked, as a small floating pill next to it: a row of reactions (your six most used, and a plus for any
- * emoji), then one row of icon actions. It sits above the message, or below when there is no room above.
- */
-@Composable
-private fun MessageActions(
-    message: Message, mine: Boolean, onDismiss: () -> Unit, onReact: (String) -> Unit, onReply: () -> Unit, onCopy: () -> Unit,
-    onEdit: () -> Unit, onDelete: () -> Unit, onPin: () -> Unit, onForward: () -> Unit, onMoreReactions: () -> Unit, quick: List<String>, onSelectMore: () -> Unit,
-    anchor: androidx.compose.ui.geometry.Rect,
-) {
-    val density = androidx.compose.ui.platform.LocalDensity.current
-    val margin = with(density) { 8.dp.roundToPx() }
-    val position = remember(anchor) {
-        object : androidx.compose.ui.window.PopupPositionProvider {
-            override fun calculatePosition(
-                anchorBounds: androidx.compose.ui.unit.IntRect, windowSize: androidx.compose.ui.unit.IntSize,
-                layoutDirection: androidx.compose.ui.unit.LayoutDirection, popupContentSize: androidx.compose.ui.unit.IntSize,
-            ): androidx.compose.ui.unit.IntOffset {
-                val above = anchor.top - popupContentSize.height - margin
-                val below = anchor.bottom + margin
-                val top = if (above >= with(density) { 72.dp.roundToPx() }) above else if (below + popupContentSize.height <= windowSize.height - margin) below else above.coerceAtLeast(margin.toFloat())
-                // Line the pill up with the bubble's edge: right for yours, left for theirs; never off screen.
-                val left = (if (mine) anchor.right - popupContentSize.width else anchor.left).toInt().coerceIn(margin, (windowSize.width - popupContentSize.width - margin).coerceAtLeast(margin))
-                return androidx.compose.ui.unit.IntOffset(left, top.toInt())
-            }
-        }
-    }
-    androidx.compose.ui.window.Popup(
-        popupPositionProvider = position, onDismissRequest = onDismiss,
-        properties = androidx.compose.ui.window.PopupProperties(focusable = true, dismissOnClickOutside = true),
-    ) {
-        Surface(shape = RoundedCornerShape(26.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh, shadowElevation = 10.dp, tonalElevation = 2.dp) {
-            Column(Modifier.width(androidx.compose.foundation.layout.IntrinsicSize.Max).padding(horizontal = 4.dp, vertical = 2.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(0.dp), verticalAlignment = Alignment.CenterVertically) {
-                    for (e in quick) Text(e, fontSize = 21.sp, modifier = Modifier.clip(CircleShape).clickable { onReact(e) }.padding(horizontal = 4.dp, vertical = 3.dp))
-                    Icon(Icons.Filled.Add, "More reactions", Modifier.clip(CircleShape).clickable { onMoreReactions() }.padding(5.dp).size(26.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Row(Modifier.fillMaxWidth().padding(bottom = 2.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-                    PillAction(Icons.AutoMirrored.Filled.Reply, "Reply", onReply)
-                    if (message.body.isNotBlank()) PillAction(Icons.Filled.ContentCopy, "Copy", onCopy)
-                    PillAction(Icons.Filled.Forward, "Forward", onForward)
-                    PillAction(Icons.Filled.PushPin, "Pin", onPin)
-                    PillAction(Icons.Filled.CheckCircle, "Select more", onSelectMore)
-                    if (mine && message.body.isNotBlank() && message.deletedAt == null) PillAction(Icons.Filled.Edit, "Edit", onEdit)
-                    if (mine && message.deletedAt == null) PillAction(Icons.Filled.Delete, "Delete", onDelete, danger = true)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun PillAction(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit, danger: Boolean = false) {
-    Icon(
-        icon, label, Modifier.clip(CircleShape).clickable(onClick = onClick).padding(8.dp).size(20.dp),
-        tint = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-    )
 }
 
 @Composable
@@ -716,20 +719,29 @@ private val AllEmoji: List<EmojiItem> by lazy {
     items
 }
 
-/** Every emoji in one place: tabs by kind, a search by name, tap to use (typed into the message, or as a reaction). */
+/**
+ * Emoji, stickers and GIFs in one sheet. Emoji: tabs by kind and a search by name, a tap uses one (typed into the message, or as a
+ * reaction). Stickers and GIFs (only when sending a message, not when reacting) are the ones you keep; a tap sends one.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun EmojiSheet(onDismiss: () -> Unit, onPick: (String) -> Unit) {
+private fun EmojiSheet(onDismiss: () -> Unit, onSticker: ((File) -> Unit)? = null, onGif: ((File) -> Unit)? = null, onPick: (String) -> Unit) {
     var query by remember { mutableStateOf("") }
     var tab by remember { mutableStateOf(0) }
+    var section by remember { mutableStateOf(0) }
     val list = remember(query, tab) {
         val q = query.trim().lowercase()
         if (q.isNotEmpty()) AllEmoji.filter { it.name.contains(q) } else AllEmoji.filter { it.category == tab }
     }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        if (onSticker != null && onGif != null) androidx.compose.material3.TabRow(selectedTabIndex = section, containerColor = Color.Transparent) {
+            listOf("Emoji", "Stickers", "GIFs").forEachIndexed { i, name -> androidx.compose.material3.Tab(selected = section == i, onClick = { section = i }, text = { Text(name) }) }
+        }
+        if (section == 1 && onSticker != null) { FavouritesGrid(sticker = true, onSend = onSticker); return@ModalBottomSheet }
+        if (section == 2 && onGif != null) { FavouritesGrid(sticker = false, onSend = onGif); return@ModalBottomSheet }
         OutlinedTextField(
             value = query, onValueChange = { query = it }, singleLine = true, placeholder = { Text("Search emoji (heart, cat, pizza…)") },
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
         )
         if (query.isBlank()) androidx.compose.material3.ScrollableTabRow(selectedTabIndex = tab, edgePadding = 8.dp) {
             EmojiCategories.forEachIndexed { i, name -> androidx.compose.material3.Tab(selected = tab == i, onClick = { tab = i }, text = { Text(name) }) }
@@ -740,20 +752,6 @@ private fun EmojiSheet(onDismiss: () -> Unit, onPick: (String) -> Unit) {
             contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp, top = 8.dp),
         ) {
             items(list.size) { i -> Text(list[i].glyph, fontSize = 28.sp, modifier = Modifier.clip(CircleShape).clickable { onPick(list[i].glyph) }.padding(8.dp)) }
-        }
-    }
-}
-
-/** What you can do with several picked messages: a pill floating over the bottom of the chat, with how many and the actions that make sense in bulk. */
-@Composable
-private fun BulkPill(count: Int, onClose: () -> Unit, onCopy: () -> Unit, onForward: () -> Unit, onDelete: () -> Unit) {
-    Surface(shape = RoundedCornerShape(26.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh, shadowElevation = 10.dp, tonalElevation = 2.dp) {
-        Row(Modifier.padding(horizontal = 6.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-            PillAction(Icons.Filled.Close, "Cancel selection", onClose)
-            Text("$count selected", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 6.dp))
-            PillAction(Icons.Filled.ContentCopy, "Copy", onCopy)
-            PillAction(Icons.Filled.Forward, "Forward", onForward)
-            PillAction(Icons.Filled.Delete, "Delete", onDelete, danger = true)
         }
     }
 }

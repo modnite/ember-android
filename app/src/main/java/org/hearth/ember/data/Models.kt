@@ -32,6 +32,9 @@ data class Attachment(
     val isImage get() = mime.startsWith("image/") && encrypted == 0
     val isAudio get() = mime.startsWith("audio/")
     val isVideo get() = mime.startsWith("video/")
+
+    /** A sticker is an ordinary picture whose file name says so (sticker-….webp), so every other client simply shows it as a picture. */
+    val isSticker get() = filename.startsWith("sticker-") && (filename.endsWith(".webp") || filename.endsWith(".png"))
 }
 
 @Serializable
