@@ -358,7 +358,6 @@ class CallController(private val app: EmberApp) {
 
     private fun startHeartbeat(roomId: String) {
         heartbeat?.cancel()
-        telecom.end()
         heartbeat = app.scope.launch {
             while (isActive) {
                 sendState(roomId)
@@ -384,6 +383,7 @@ class CallController(private val app: EmberApp) {
         val wasInCall = s.phase == Phase.Connected || s.phase == Phase.Connecting
         val roomId = s.roomId
         heartbeat?.cancel()
+        telecom.end()
         if (roomId != null && (s.phase == Phase.Connected || s.phase == Phase.Connecting)) app.realtime.leaveCall(roomId)
         stopCamera()
         job?.cancel()

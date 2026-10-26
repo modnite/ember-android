@@ -75,8 +75,9 @@ class SoundPlayer(private val context: Context) {
                 val request = okhttp3.Request.Builder().url(app.store.server + "/assets/sounds/nudge.mp3").build()
                 app.client.newCall(request).execute().use { r ->
                     if (r.isSuccessful) r.body?.bytes()?.takeIf { it.size > 1000 }?.let { nudgeFile.writeBytes(it) }
+                    android.util.Log.d("NudgeSound", "fetch ${request.url} -> ${r.code}, saved=${nudgeFile.exists()}")
                 }
-            }
+            }.onFailure { android.util.Log.w("NudgeSound", "fetch failed: $it") }
             fetching = false
         }
     }

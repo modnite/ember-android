@@ -43,19 +43,21 @@ class TelecomBridge(private val app: EmberApp) {
                 manager.addCall(
                     attributes,
                     onAnswer = { },
-                    onDisconnect = { if (!done.isCompleted) onEndedBySystem() },
+                    onDisconnect = { cause -> Log.d("Telecom", "system disconnected the call: $cause done=${done.isCompleted}"); if (!done.isCompleted) onEndedBySystem() },
                     onSetActive = { },
                     onSetInactive = { },
                 ) {
                     // The block is not a suspending one itself; the call's own scope runs the work.
+                    Log.d("Telecom", "call scope started")
                     launch {
-                        setActive()
+                        Log.d("Telecom", "setActive -> ${setActive()}")
                         launch { isMuted.collect { onSystemMute(it) } }
                         done.await()
+                        Log.d("Telecom", "app ended the call, disconnecting")
                         disconnect(DisconnectCause(DisconnectCause.LOCAL))
                     }
                 }
-            }.onFailure { Log.w("Telecom", "call not registered with the system", it) }
+            }.onSuccess { Log.d("Telecom", "addCall returned") }.onFailure { Log.w("Telecom", "call not registered with the system", it) }
         }
     }
 

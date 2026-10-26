@@ -46,6 +46,11 @@ class EmberApp : Application(), ImageLoaderFactory {
         store = SessionStore(this)
         client = OkHttpClient.Builder()
             .cookieJar(PersistentCookieJar(store))
+            // "localhost" always means this phone, even when a VPN's DNS cannot answer for it (a server reached through adb or a tunnel).
+            .dns(object : okhttp3.Dns {
+                override fun lookup(hostname: String): List<java.net.InetAddress> =
+                    if (hostname == "localhost") listOf(java.net.InetAddress.getByAddress(hostname, byteArrayOf(127, 0, 0, 1))) else okhttp3.Dns.SYSTEM.lookup(hostname)
+            })
             .connectTimeout(15, TimeUnit.SECONDS)
             .followRedirects(false)
             .build()
