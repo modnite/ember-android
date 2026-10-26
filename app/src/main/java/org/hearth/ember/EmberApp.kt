@@ -1,0 +1,72 @@
+package org.hearth.ember
+
+import android.app.Application
+import coil.ImageLoader
+import coil.ImageLoaderFactory
+import coil.disk.DiskCache
+import coil.memory.MemoryCache
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import okhttp3.OkHttpClient
+import org.hearth.ember.data.Api
+import org.hearth.ember.data.PersistentCookieJar
+import org.hearth.ember.data.Realtime
+import org.hearth.ember.data.Repository
+import org.hearth.ember.data.SessionStore
+import org.hearth.ember.notify.CallNotifier
+import org.hearth.ember.notify.Notifier
+import org.hearth.ember.ui.Prefs
+import java.util.concurrent.TimeUnit
+
+/** Builds the app's long-lived parts once. There is no dependency-injection framework: there are only a handful of them. */
+class EmberApp : Application(), ImageLoaderFactory {
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    lateinit var store: SessionStore
+    lateinit var client: OkHttpClient
+    lateinit var api: Api
+    lateinit var realtime: Realtime
+    lateinit var repo: Repository
+    lateinit var prefs: Prefs
+    lateinit var notifier: Notifier
+    lateinit var callNotifier: CallNotifier
+    lateinit var e2ee: org.hearth.ember.data.E2ee
+    /** On a wide screen (a phone on its side, a tablet) the chat opens beside the list instead of replacing it. */
+    val selectedRoom = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+
+    /** Something another app asked to send through Ember; the "Send to" screen picks it up and clears it. */
+    val share = kotlinx.coroutines.flow.MutableStateFlow<org.hearth.ember.ui.chat.SharePayload?>(null)
+    val sounds by lazy { org.hearth.ember.notify.SoundPlayer(this) }
+    val updater by lazy { org.hearth.ember.data.Updater(this, client, BuildConfig.UPDATE_REPO, BuildConfig.VERSION_NAME) }
+    val backup by lazy { org.hearth.ember.data.BackupService(this, this) }
+    var callController: org.hearth.ember.call.CallController? = null
+
+    override fun onCreate() {
+        super.onCreate()
+        store = SessionStore(this)
+        client = OkHttpClient.Builder()
+            .cookieJar(PersistentCookieJar(store))
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .followRedirects(false)
+            .build()
+        api = Api(store, client)
+        realtime = Realtime(store, client, scope)
+        e2ee = org.hearth.ember.data.E2ee(store, api)
+        repo = Repository(this, store, api, realtime, client, scope, e2ee)
+        prefs = Prefs(this)
+        notifier = Notifier(this)
+        callNotifier = CallNotifier(this)
+        callController = org.hearth.ember.call.CallController(this)
+        notifier.createChannels()
+    }
+
+    /** Pictures come from the Hearth server, which wants the session cookie: the same client serves them. */
+    override fun newImageLoader(): ImageLoader = ImageLoader.Builder(this)
+        .okHttpClient(client)
+        .memoryCache { MemoryCache.Builder(this).maxSizePercent(0.2).build() }
+        .diskCache { DiskCache.Builder().directory(cacheDir.resolve("images")).maxSizeBytes(150L * 1024 * 1024).build() }
+        .crossfade(true)
+        .build()
+}
+
+val android.content.Context.ember: EmberApp get() = applicationContext as EmberApp

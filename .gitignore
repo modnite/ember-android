@@ -1,0 +1,10 @@
+keystore.properties
+*.jks
+*.keystore
+local.properties
+build/
+.gradle/
+*.apk
+sound-samples/
+.idea/
+*.iml

@@ -1,0 +1,134 @@
+package org.hearth.ember.ui
+
+import android.content.Context
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.serialization.json.put
+
+enum class ThemeMode { System, Light, Dark, Black }
+
+/** Small settings that belong to this phone: how it looks, how loud notifications are. */
+class Prefs(context: Context) {
+    private val p = context.getSharedPreferences("ember_prefs", Context.MODE_PRIVATE)
+
+    private val _theme = MutableStateFlow(ThemeMode.entries.getOrElse(p.getInt("theme", 0)) { ThemeMode.System })
+    val theme: StateFlow<ThemeMode> = _theme.asStateFlow()
+    fun setTheme(mode: ThemeMode) {
+        p.edit().putInt("theme", mode.ordinal).apply()
+        _theme.value = mode
+    }
+
+    // Which emoji get used for reactions, and how often: the quick bar always shows the six used most (the usual ones fill the gaps).
+    private val usage = LinkedHashMap<String, Int>().also { m ->
+        p.getString("emojiUse", "")?.lineSequence()?.forEach { line ->
+            val parts = line.split('\t')
+            if (parts.size == 2) parts[1].toIntOrNull()?.let { m[parts[0]] = it }
+        }
+    }
+    private fun topSix(): List<String> {
+        val used = usage.entries.sortedByDescending { it.value }.map { it.key }.take(6)
+        return (used + listOf("👍", "❤️", "😂", "😮", "😢", "🙏")).distinct().take(6)
+    }
+    private val _quick = MutableStateFlow(topSix())
+    val quickReactions: StateFlow<List<String>> = _quick.asStateFlow()
+    fun useEmoji(emoji: String) {
+        usage[emoji] = (usage[emoji] ?: 0) + 1
+        // Keep the list from growing for ever: the 60 most used.
+        if (usage.size > 60) usage.entries.sortedBy { it.value }.take(usage.size - 60).forEach { usage.remove(it.key) }
+        p.edit().putString("emojiUse", usage.entries.joinToString("\n") { it.key + "\t" + it.value }).apply()
+        _quick.value = topSix()
+    }
+
+    // Sounds: null is the phone's default; "silent" is none; otherwise the chosen sound's address.
+    private val _messageSound = MutableStateFlow(p.getString("messageSound", null))
+    val messageSound: StateFlow<String?> = _messageSound.asStateFlow()
+    fun setMessageSound(uri: String?) { p.edit().putString("messageSound", uri).apply(); _messageSound.value = uri }
+    private val _callSound = MutableStateFlow(p.getString("callSound", null))
+    val callSound: StateFlow<String?> = _callSound.asStateFlow()
+    fun setCallSound(uri: String?) { p.edit().putString("callSound", uri).apply(); _callSound.value = uri }
+
+    /** Everything on this page of settings, for a backup. */
+    fun dump(): kotlinx.serialization.json.JsonObject = kotlinx.serialization.json.buildJsonObject {
+        for ((k, v) in p.all) when (v) {
+            is Boolean -> put(k, v)
+            is Int -> put(k, v)
+            is String -> put(k, v)
+            is Long -> put(k, v)
+        }
+    }
+
+    /** Put a backup's settings back, and tell the screens. */
+    fun restore(json: kotlinx.serialization.json.JsonObject) {
+        val e = p.edit()
+        for ((k, v) in json) {
+            val prim = (v as? kotlinx.serialization.json.JsonPrimitive) ?: continue
+            when {
+                prim.isString -> e.putString(k, prim.content)
+                prim.content == "true" || prim.content == "false" -> e.putBoolean(k, prim.content == "true")
+                else -> prim.content.toIntOrNull()?.let { e.putInt(k, it) }
+            }
+        }
+        e.apply()
+        _theme.value = ThemeMode.entries.getOrElse(p.getInt("theme", 0)) { ThemeMode.System }
+        _sounds.value = p.getBoolean("sounds", true)
+        _accent.value = if (p.contains("accent")) p.getInt("accent", 0) else null
+        _notify.value = p.getBoolean("notify", true)
+        _preview.value = p.getBoolean("preview", true)
+        _enter.value = p.getBoolean("enterSends", false)
+        _dynamic.value = p.getBoolean("dynamic", false)
+        _messageSound.value = p.getString("messageSound", null)
+        _callSound.value = p.getString("callSound", null)
+        usage.clear()
+        p.getString("emojiUse", "")?.lineSequence()?.forEach { line ->
+            val parts = line.split('\t')
+            if (parts.size == 2) parts[1].toIntOrNull()?.let { usage[parts[0]] = it }
+        }
+        _quick.value = topSix()
+    }
+
+    /** One switch for the sounds inside a chat (a message arriving, one sent, someone typing). Notification sounds and the ringtone have their own settings. */
+    private val _sounds = MutableStateFlow(p.getBoolean("sounds", true))
+    val soundsOn: StateFlow<Boolean> = _sounds.asStateFlow()
+    fun setSoundsOn(on: Boolean) { p.edit().putBoolean("sounds", on).apply(); _sounds.value = on }
+
+    /** The accent colour (an ARGB number), or null for Ember's own orange. */
+    private val _accent = MutableStateFlow(if (p.contains("accent")) p.getInt("accent", 0) else null)
+    val accent: StateFlow<Int?> = _accent.asStateFlow()
+    fun setAccent(argb: Int?) {
+        if (argb == null) p.edit().remove("accent").apply() else p.edit().putInt("accent", argb).apply()
+        _accent.value = argb
+    }
+
+    private val _notify = MutableStateFlow(p.getBoolean("notify", true))
+    val notificationsOn: StateFlow<Boolean> = _notify.asStateFlow()
+    fun setNotifications(on: Boolean) {
+        p.edit().putBoolean("notify", on).apply()
+        _notify.value = on
+    }
+
+    private val _preview = MutableStateFlow(p.getBoolean("preview", true))
+
+    /** Show the message text in notifications (off: just "New message"). */
+    val previews: StateFlow<Boolean> = _preview.asStateFlow()
+    fun setPreviews(on: Boolean) {
+        p.edit().putBoolean("preview", on).apply()
+        _preview.value = on
+    }
+
+    private val _enter = MutableStateFlow(p.getBoolean("enterSends", false))
+    val enterSends: StateFlow<Boolean> = _enter.asStateFlow()
+    fun setEnterSends(on: Boolean) {
+        p.edit().putBoolean("enterSends", on).apply()
+        _enter.value = on
+    }
+
+    private val _dynamic = MutableStateFlow(p.getBoolean("dynamic", false))
+
+    /** Use the phone's own wallpaper colours (Material You) instead of Ember orange. */
+    val dynamicColor: StateFlow<Boolean> = _dynamic.asStateFlow()
+    fun setDynamicColor(on: Boolean) {
+        p.edit().putBoolean("dynamic", on).apply()
+        _dynamic.value = on
+    }
+}
