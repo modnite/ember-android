@@ -1,5 +1,6 @@
 package org.hearth.ember.ui.settings
 
+import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -12,13 +13,31 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Backup
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.CreateNewFolder
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Password
+import androidx.compose.material.icons.filled.Restore
+import androidx.compose.material.icons.filled.Schedule as ScheduleIcon
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,138 +48,277 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Backup
-import androidx.compose.material.icons.filled.CloudUpload
-import androidx.compose.material.icons.filled.Restore
+import androidx.documentfile.provider.DocumentFile
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.UUID
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.hearth.ember.data.BackupException
-import org.hearth.ember.data.BackupFormat
+import org.hearth.ember.data.BackupNames
+import org.hearth.ember.data.BackupScheduler
+import org.hearth.ember.data.DavTarget
+import org.hearth.ember.data.Destination
+import org.hearth.ember.data.RemoteEntry
+import org.hearth.ember.data.Schedule
 import org.hearth.ember.ember
+import org.hearth.ember.ui.fileSize
 
-/** What the person is in the middle of: choosing how to back up, or entering a passphrase for a file being restored. */
-private sealed interface Step {
-    data object ChooseDestination : Step
-    data object ChooseSource : Step
-    data object ToFile : Step
-    data object ToDav : Step
-    class Passphrase(val file: ByteArray) : Step
+/** The windows the backup page can have open. */
+private sealed interface Dlg {
+    data object AddDav : Dlg
+    data object SetPassphrase : Dlg
+    data object PickSchedule : Dlg
+    data object RestoreSource : Dlg
+    class RestoreList(val dest: Destination, val entries: List<RemoteEntry>) : Dlg
+    class AskPassphrase(val then: (String) -> Unit) : Dlg
+}
+
+private fun whenOf(e: RemoteEntry): String {
+    val ms = if (e.modified > 0) e.modified else runCatching {
+        SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).parse(e.name.removePrefix(BackupNames.CORE_PREFIX).take(13))?.time
+    }.getOrNull() ?: 0L
+    return if (ms > 0) SimpleDateFormat("d MMM yyyy, HH:mm", Locale.getDefault()).format(Date(ms)) else e.name
+}
+
+private fun ago(ms: Long): String {
+    val minutes = (System.currentTimeMillis() - ms) / 60_000
+    return when {
+        minutes < 1 -> "just now"
+        minutes < 60 -> "$minutes min ago"
+        minutes < 48 * 60 -> "${minutes / 60} h ago"
+        else -> "${minutes / (24 * 60)} days ago"
+    }
 }
 
 /**
- * Backup and restore. A backup holds the encryption key and the settings (messages live on the server). It can be saved as a file anywhere
- * Android can reach, or sent to a WebDAV or Nextcloud server, and it can be encrypted with a passphrase or left plain, as you choose.
+ * Backup and restore. A backup holds your encryption key, your settings and your stickers (and, if you ask, a readable copy of your chats and
+ * their files). It goes to as many places as you like (folders Android can reach, WebDAV or Nextcloud), by hand or on a schedule, encrypted with
+ * a passphrase or left plain, as you choose.
  */
 @Composable
 fun BackupRows() {
     val context = LocalContext.current
     val app = context.ember
+    val settings = app.backup.settings
+    val revision by settings.revision.collectAsState()
     val scope = rememberCoroutineScope()
-    var step by remember { mutableStateOf<Step?>(null) }
-    var encrypt by remember { mutableStateOf(true) }
+    var dialog by remember { mutableStateOf<Dlg?>(null) }
+    var progress by remember { mutableStateOf<String?>(null) }
     var pass by remember { mutableStateOf("") }
     var pass2 by remember { mutableStateOf("") }
-    var url by remember { mutableStateOf(app.store.webdavUrl) }
-    var user by remember { mutableStateOf(app.store.webdavUser) }
-    var davPass by remember { mutableStateOf(app.store.webdavPass) }
-    var pending by remember { mutableStateOf<ByteArray?>(null) }
-    var busy by remember { mutableStateOf(false) }
+    var url by remember { mutableStateOf("") }
+    var user by remember { mutableStateOf("") }
+    var davPass by remember { mutableStateOf("") }
+    var label by remember { mutableStateOf("") }
+    var pendingFile by remember { mutableStateOf<ByteArray?>(null) }
+    val busy = progress != null
 
     fun say(text: String) = Toast.makeText(context, text, Toast.LENGTH_LONG).show()
     fun problem(e: Throwable) = say(e.message ?: "Something went wrong.")
+    fun reschedule() = BackupScheduler.apply(context, settings)
 
-    val createFile = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri: Uri? ->
-        val bytes = pending; pending = null
-        if (uri != null && bytes != null) scope.launch { runCatching { app.backup.writeUri(uri, bytes) }.onSuccess { say("Backup saved.") }.onFailure { problem(it) } }
+    val addFolder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri: Uri? ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION) }
+        val name = DocumentFile.fromTreeUri(context, uri)?.name ?: "Folder"
+        settings.destinations = settings.destinations.filter { it.uri != uri.toString() } + Destination(UUID.randomUUID().toString().take(8), Destination.KIND_FOLDER, name, uri.toString())
     }
 
-    /** Restore from [file]; an encrypted one asks for its passphrase first. */
-    fun restore(file: ByteArray, passphrase: String?) {
+    /** Restore from a file's bytes; an encrypted one asks for its passphrase. */
+    fun restoreBytes(bytes: ByteArray, passphrase: String?) {
         scope.launch {
-            runCatching { app.backup.apply(file, passphrase) }.onSuccess { say(it); step = null; pass = "" }.onFailure { e ->
-                if (e is BackupException && e.needsPassphrase) step = Step.Passphrase(file).also { if (!passphrase.isNullOrEmpty()) say(e.message ?: "") } else problem(e)
+            progress = "Restoring…"
+            runCatching { app.backup.apply(bytes, passphrase) }.onSuccess { say(it) }.onFailure { e ->
+                if (e is BackupException && e.needsPassphrase) dialog = Dlg.AskPassphrase { p -> restoreBytes(bytes, p) } else problem(e)
             }
+            progress = null
+        }
+    }
+    fun restoreEntry(d: Destination, name: String, passphrase: String?) {
+        scope.launch {
+            progress = "Restoring…"
+            runCatching { app.backup.restoreFrom(d, name, passphrase) }.onSuccess { say(it) }.onFailure { e ->
+                if (e is BackupException && e.needsPassphrase) dialog = Dlg.AskPassphrase { p -> restoreEntry(d, name, p) } else problem(e)
+            }
+            progress = null
         }
     }
     val openFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
-        if (uri != null) scope.launch { runCatching { app.backup.readUri(uri) }.onSuccess { restore(it, null) }.onFailure { problem(it) } }
+        if (uri != null) scope.launch { runCatching { withContext(Dispatchers.IO) { app.backup.readUri(uri) } }.onSuccess { restoreBytes(it, settings.passphrase.ifEmpty { null }) }.onFailure { problem(it) } }
     }
 
-    ActionRow(Icons.Filled.Backup, "Back up", "Save your encryption key and settings") { step = Step.ChooseDestination }
-    ActionRow(Icons.Filled.Restore, "Restore", "Put a saved backup back on this phone") { step = Step.ChooseSource }
-    if (busy) Text("Working…", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 56.dp))
+    fun backUpNow() {
+        scope.launch {
+            progress = "Starting…"
+            runCatching { app.backup.runNow { progress = it } }.onSuccess { results ->
+                val failed = results.filter { !it.second.ok }
+                say(if (failed.isEmpty()) "Backed up to ${results.size} ${if (results.size == 1) "place" else "places"}." else failed.joinToString("\n") { "${it.first.label}: ${it.second.message}" })
+            }.onFailure { problem(it) }
+            progress = null
+        }
+    }
 
-    val current = step
-    if (current is Step.ChooseDestination) AlertDialog(
-        onDismissRequest = { step = null },
-        title = { Text("Back up to") },
-        text = {
-            Column {
-                Choice("A file", "On this phone, an SD card or a network share") { encrypt = true; step = Step.ToFile }
-                Choice("WebDAV or Nextcloud", "Your own server") { encrypt = true; step = Step.ToDav }
+    Section("Back up")
+    ActionRow(Icons.Filled.Backup, "Back up now", lastSummary(settings.destinations.size, settings.lastRuns.values.maxOfOrNull { it.at }, revision)) {
+        if (settings.destinations.isEmpty()) say("Add a place to keep backups first.") else if (!busy) backUpNow()
+    }
+    progress?.let {
+        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 56.dp, end = 20.dp))
+        LinearProgressIndicator(Modifier.fillMaxWidth().padding(start = 56.dp, end = 20.dp, top = 6.dp, bottom = 6.dp))
+    }
+
+    Section("Where backups are kept")
+    for (d in settings.destinations) {
+        val run = settings.lastRuns[d.id]
+        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(if (d.isFolder) Icons.Filled.Folder else Icons.Filled.Cloud, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.width(20.dp))
+            Column(Modifier.weight(1f)) {
+                Text(d.label, style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    when { run == null -> "Nothing backed up here yet"; run.ok -> "Last backup ${ago(run.at)}, ${fileSize(run.bytes)}"; else -> "Failed ${ago(run.at)}: ${run.message}" },
+                    style = MaterialTheme.typography.bodySmall, color = if (run != null && !run.ok) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
-        },
-        confirmButton = { TextButton(onClick = { step = null }) { Text("Cancel") } },
-    )
-    if (current is Step.ChooseSource) AlertDialog(
-        onDismissRequest = { step = null },
-        title = { Text("Restore from") },
-        text = {
-            Column {
-                Choice("A file", "Open a backup you saved") { step = null; openFile.launch(arrayOf("*/*")) }
-                Choice("WebDAV or Nextcloud", "The newest backup on your server") {
-                    step = null
-                    if (app.store.webdavUrl.isBlank()) { encrypt = true; step = Step.ToDav; say("Enter your server first.") }
-                    else scope.launch { busy = true; runCatching { app.backup.downloadLatestDav() }.onSuccess { restore(it, null) }.onFailure { problem(it) }; busy = false }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = { step = null }) { Text("Cancel") } },
-    )
-    if (current is Step.ToFile || current is Step.ToDav) {
-        val toDav = current is Step.ToDav
-        val mismatch = encrypt && (pass.isEmpty() || pass != pass2)
-        AlertDialog(
-            onDismissRequest = { step = null },
-            title = { Text(if (toDav) "Back up to WebDAV or Nextcloud" else "Back up to a file") },
+            IconButton(onClick = { settings.destinations = settings.destinations.filter { it.id != d.id }; settings.lastRuns = settings.lastRuns - d.id }) { Icon(Icons.Filled.Delete, "Remove ${d.label}") }
+        }
+    }
+    ActionRow(Icons.Filled.CreateNewFolder, "Add a folder", "On this phone, an SD card or USB drive, or a network share through its app") { addFolder.launch(null) }
+    ActionRow(Icons.Filled.Cloud, "Add WebDAV or Nextcloud", "Your own server") { url = ""; user = ""; davPass = ""; label = ""; dialog = Dlg.AddDav }
+
+    Section("What is included")
+    ActionRow(Icons.Filled.Lock, "Encryption key, settings and stickers", "Always included. The key opens your encrypted chats on a new phone.") { }
+    ToggleRow(Icons.Filled.History, "Chat history", "A readable copy of your conversations. The messages stay on your server too.", settings.includeHistory) { settings.includeHistory = it }
+    ToggleRow(Icons.Filled.Image, "Pictures, videos and files", if (settings.includeHistory) "Everything sent in your chats (files over 64 MB are left out)." else "Turn on chat history first.", settings.includeMedia && settings.includeHistory) {
+        if (settings.includeHistory) settings.includeMedia = it
+    }
+
+    Section("Protection")
+    ToggleRow(Icons.Filled.Lock, "Encrypt backups", if (settings.encrypt) "Sealed with your passphrase. Without it a backup cannot be opened." else "Plain: anyone who gets the file can read it, and it contains your encryption key.", settings.encrypt) { settings.encrypt = it }
+    if (settings.encrypt) ActionRow(Icons.Filled.Password, "Passphrase", if (settings.passphrase.isEmpty()) "Not set. Backups need one." else "Set. Tap to change it.") { pass = ""; pass2 = ""; dialog = Dlg.SetPassphrase }
+
+    Section("Automatic backups")
+    ActionRow(Icons.Filled.ScheduleIcon, "How often", if (settings.schedule == Schedule.Off) "Off. Backups only happen when you ask." else settings.schedule.label) { dialog = Dlg.PickSchedule }
+    ToggleRow(Icons.Filled.Wifi, "Only on Wi-Fi", "Scheduled backups wait for an unmetered network.", settings.wifiOnly) { settings.wifiOnly = it; reschedule() }
+    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Spacer(Modifier.width(44.dp))
+        Column(Modifier.weight(1f)) {
+            Text("Keep the last ${settings.keep} backups", style = MaterialTheme.typography.bodyLarge)
+            Text("Older ones are deleted from each place.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        TextButton(onClick = { settings.keep = settings.keep - 1 }, enabled = settings.keep > 1) { Text("−") }
+        TextButton(onClick = { settings.keep = settings.keep + 1 }, enabled = settings.keep < 30) { Text("+") }
+    }
+
+    Section("Restore")
+    ActionRow(Icons.Filled.Restore, "Restore", "From a place you back up to, or from a file") { dialog = Dlg.RestoreSource }
+
+    when (val d = dialog) {
+        Dlg.AddDav -> AlertDialog(
+            onDismissRequest = { dialog = null },
+            title = { Text("Add WebDAV or Nextcloud") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (toDav) {
-                        OutlinedTextField(url, { url = it }, singleLine = true, label = { Text("Folder address") }, placeholder = { Text("https://cloud.example.com/remote.php/dav/files/you/Backups") })
-                        OutlinedTextField(user, { user = it }, singleLine = true, label = { Text("Username") })
-                        OutlinedTextField(davPass, { davPass = it }, singleLine = true, label = { Text("Password or app password") }, visualTransformation = PasswordVisualTransformation())
-                    }
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text("Encrypt with a passphrase", Modifier.weight(1f))
-                        Switch(encrypt, { encrypt = it })
-                    }
-                    if (encrypt) {
-                        OutlinedTextField(pass, { pass = it }, singleLine = true, label = { Text("Passphrase") }, visualTransformation = PasswordVisualTransformation())
-                        OutlinedTextField(pass2, { pass2 = it }, singleLine = true, label = { Text("Passphrase again") }, visualTransformation = PasswordVisualTransformation())
-                        Text("Keep it safe: without it an encrypted backup cannot be opened.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    } else Text("A plain backup can be read by anyone who gets the file, and it contains your encryption key.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    OutlinedTextField(url, { url = it }, singleLine = true, label = { Text("Folder address") }, placeholder = { Text("https://cloud.example.com/remote.php/dav/files/you/Backups") })
+                    OutlinedTextField(user, { user = it }, singleLine = true, label = { Text("Username") })
+                    OutlinedTextField(davPass, { davPass = it }, singleLine = true, label = { Text("Password or app password") }, visualTransformation = PasswordVisualTransformation())
                 }
             },
             confirmButton = {
-                TextButton(enabled = !mismatch && (!toDav || url.isNotBlank()), onClick = {
-                    val bytes = app.backup.make(if (encrypt) pass else null)
-                    step = null; pass = ""; pass2 = ""
-                    if (toDav) {
-                        app.store.webdavUrl = url; app.store.webdavUser = user; app.store.webdavPass = davPass
-                        scope.launch { busy = true; runCatching { app.backup.uploadDav(bytes) }.onSuccess { say("Backed up as $it.") }.onFailure { problem(it) }; busy = false }
-                    } else { pending = bytes; createFile.launch(app.backup.fileName()) }
-                }) { Text("Back up") }
+                TextButton(enabled = url.isNotBlank(), onClick = {
+                    val dest = Destination(UUID.randomUUID().toString().take(8), Destination.KIND_DAV, runCatching { Uri.parse(url.trim()).host }.getOrNull() ?: "WebDAV", url.trim(), user.trim(), davPass)
+                    dialog = null
+                    scope.launch {
+                        progress = "Checking ${dest.label}…"
+                        // It is only kept if the server answers with this sign-in.
+                        runCatching { withContext(Dispatchers.IO) { DavTarget(app.client, dest).list() } }.onSuccess { settings.destinations = settings.destinations + dest; say("Added ${dest.label}.") }.onFailure { problem(it) }
+                        progress = null
+                    }
+                }) { Text("Check and add") }
             },
-            dismissButton = { TextButton(onClick = { step = null }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { dialog = null }) { Text("Cancel") } },
         )
+        Dlg.SetPassphrase -> {
+            val mismatch = pass.isEmpty() || pass != pass2
+            AlertDialog(
+                onDismissRequest = { dialog = null },
+                title = { Text("Backup passphrase") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(pass, { pass = it }, singleLine = true, label = { Text("Passphrase") }, visualTransformation = PasswordVisualTransformation())
+                        OutlinedTextField(pass2, { pass2 = it }, singleLine = true, label = { Text("Passphrase again") }, visualTransformation = PasswordVisualTransformation())
+                        Text("Keep it somewhere safe. It is stored on this phone so scheduled backups can run, but a lost phone takes it with it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                },
+                confirmButton = { TextButton(enabled = !mismatch, onClick = { settings.passphrase = pass; pass = ""; pass2 = ""; dialog = null }) { Text("Save") } },
+                dismissButton = { TextButton(onClick = { dialog = null }) { Text("Cancel") } },
+            )
+        }
+        Dlg.PickSchedule -> AlertDialog(
+            onDismissRequest = { dialog = null },
+            title = { Text("Back up automatically") },
+            text = {
+                Column {
+                    for (s in Schedule.entries) Row(Modifier.fillMaxWidth().clickable { settings.schedule = s; reschedule(); dialog = null }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = settings.schedule == s, onClick = { settings.schedule = s; reschedule(); dialog = null })
+                        Text(s.label)
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { dialog = null }) { Text("Close") } },
+        )
+        Dlg.RestoreSource -> AlertDialog(
+            onDismissRequest = { dialog = null },
+            title = { Text("Restore from") },
+            text = {
+                Column {
+                    for (dest in settings.destinations) Choice(dest.label, if (dest.isFolder) "A folder" else "WebDAV or Nextcloud") {
+                        dialog = null
+                        scope.launch {
+                            progress = "Looking in ${dest.label}…"
+                            runCatching { app.backup.backupsIn(dest) }.onSuccess { list -> if (list.isEmpty()) say("No Ember backups in ${dest.label}.") else dialog = Dlg.RestoreList(dest, list) }.onFailure { problem(it) }
+                            progress = null
+                        }
+                    }
+                    Choice("A file", "Open a backup you saved") { dialog = null; openFile.launch(arrayOf("*/*")) }
+                }
+            },
+            confirmButton = { TextButton(onClick = { dialog = null }) { Text("Cancel") } },
+        )
+        is Dlg.RestoreList -> AlertDialog(
+            onDismissRequest = { dialog = null },
+            title = { Text("Choose a backup") },
+            text = {
+                Column {
+                    for (e in d.entries.take(10)) Choice(whenOf(e), if (e.size > 0) fileSize(e.size) else e.name) { dialog = null; restoreEntry(d.dest, e.name, settings.passphrase.ifEmpty { null }) }
+                }
+            },
+            confirmButton = { TextButton(onClick = { dialog = null }) { Text("Cancel") } },
+        )
+        is Dlg.AskPassphrase -> AlertDialog(
+            onDismissRequest = { dialog = null; pass = "" },
+            title = { Text("This backup is encrypted") },
+            text = { OutlinedTextField(pass, { pass = it }, singleLine = true, label = { Text("Passphrase") }, visualTransformation = PasswordVisualTransformation()) },
+            confirmButton = { TextButton(enabled = pass.isNotEmpty(), onClick = { val p = pass; pass = ""; dialog = null; d.then(p) }) { Text("Restore") } },
+            dismissButton = { TextButton(onClick = { dialog = null; pass = "" }) { Text("Cancel") } },
+        )
+        null -> {}
     }
-    if (current is Step.Passphrase) AlertDialog(
-        onDismissRequest = { step = null; pass = "" },
-        title = { Text("This backup is encrypted") },
-        text = { OutlinedTextField(pass, { pass = it }, singleLine = true, label = { Text("Passphrase") }, visualTransformation = PasswordVisualTransformation()) },
-        confirmButton = { TextButton(enabled = pass.isNotEmpty(), onClick = { restore(current.file, pass) }) { Text("Restore") } },
-        dismissButton = { TextButton(onClick = { step = null; pass = "" }) { Text("Cancel") } },
-    )
+    @Suppress("UNUSED_VARIABLE") val keepAlive = pendingFile
+}
+
+private fun lastSummary(places: Int, last: Long?, @Suppress("UNUSED_PARAMETER") revision: Int): String = when {
+    places == 0 -> "Add a place to keep backups first"
+    last == null -> "Not backed up yet"
+    else -> "Last backup ${ago(last)}"
+}
+
+@Composable
+private fun Section(title: String) {
+    Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 6.dp))
 }
 
 @Composable
@@ -168,5 +326,83 @@ private fun Choice(title: String, subtitle: String, onClick: () -> Unit) {
     Column(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 10.dp)) {
         Text(title, style = MaterialTheme.typography.bodyLarge)
         Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/**
+ * Restoring on a new phone, before signing in: a backup file, or the newest backup on a WebDAV or Nextcloud server, puts the encryption key and
+ * the settings back, so the encrypted chats open as soon as you sign in.
+ */
+@Composable
+fun RestoreOnSignIn(onClose: () -> Unit) {
+    val context = LocalContext.current
+    val app = context.ember
+    val scope = rememberCoroutineScope()
+    var step by remember { mutableStateOf(0) } // 0 where from, 1 the server's details, 2 a passphrase
+    var url by remember { mutableStateOf("") }
+    var user by remember { mutableStateOf("") }
+    var davPass by remember { mutableStateOf("") }
+    var passphrase by remember { mutableStateOf("") }
+    var continueWith by remember { mutableStateOf<((String) -> Unit)?>(null) }
+    var busy by remember { mutableStateOf(false) }
+
+    fun say(text: String) = Toast.makeText(context, text, Toast.LENGTH_LONG).show()
+
+    fun run(block: suspend () -> String, again: (String) -> Unit) {
+        scope.launch {
+            busy = true
+            runCatching { block() }.onSuccess { say(it); onClose() }.onFailure { e ->
+                if (e is BackupException && e.needsPassphrase) { continueWith = again; step = 2 } else say(e.message ?: "Something went wrong.")
+            }
+            busy = false
+        }
+    }
+    fun fromBytes(bytes: ByteArray, p: String?) { run({ app.backup.apply(bytes, p) }) { fromBytes(bytes, it) } }
+    fun fromServer(d: Destination, p: String?) {
+        run({
+            val newest = app.backup.backupsIn(d).firstOrNull() ?: throw BackupException("No Ember backup found in that folder.")
+            app.backup.restoreFrom(d, newest.name, p)
+        }) { fromServer(d, it) }
+    }
+    val openFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        if (uri != null) scope.launch { runCatching { withContext(Dispatchers.IO) { app.backup.readUri(uri) } }.onSuccess { fromBytes(it, null) }.onFailure { say(it.message ?: "Could not read that file.") } }
+    }
+    val server by remember(url, user, davPass) { mutableStateOf(Destination("restore", Destination.KIND_DAV, "server", url.trim(), user.trim(), davPass)) }
+
+    when (step) {
+        0 -> AlertDialog(
+            onDismissRequest = onClose,
+            title = { Text("Restore from a backup") },
+            text = {
+                Column {
+                    Text("This puts your encryption key and settings back, so your encrypted chats open once you sign in.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(8.dp))
+                    Choice("A file", "Open a backup you saved") { openFile.launch(arrayOf("*/*")) }
+                    Choice("WebDAV or Nextcloud", "The newest backup on your server") { step = 1 }
+                }
+            },
+            confirmButton = { TextButton(onClick = onClose) { Text("Cancel") } },
+        )
+        1 -> AlertDialog(
+            onDismissRequest = onClose,
+            title = { Text("Your backup server") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(url, { url = it }, singleLine = true, label = { Text("Folder address") })
+                    OutlinedTextField(user, { user = it }, singleLine = true, label = { Text("Username") })
+                    OutlinedTextField(davPass, { davPass = it }, singleLine = true, label = { Text("Password or app password") }, visualTransformation = PasswordVisualTransformation())
+                    if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+                }
+            },
+            confirmButton = { TextButton(enabled = url.isNotBlank() && !busy, onClick = { fromServer(server, null) }) { Text("Restore") } },
+            dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } },
+        )
+        else -> AlertDialog(
+            onDismissRequest = onClose,
+            title = { Text("This backup is encrypted") },
+            text = { OutlinedTextField(passphrase, { passphrase = it }, singleLine = true, label = { Text("Passphrase") }, visualTransformation = PasswordVisualTransformation()) },
+            confirmButton = { TextButton(enabled = passphrase.isNotEmpty(), onClick = { val p = passphrase; passphrase = ""; continueWith?.invoke(p) }) { Text("Restore") } },
+            dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } },
+        )
     }
 }

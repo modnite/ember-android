@@ -23,12 +23,14 @@ class BackupException(message: String, val needsPassphrase: Boolean = false) : E
  * from the passphrase (PBKDF2-SHA256, 200,000 rounds). Pure Kotlin, so it is tested without a phone.
  */
 object BackupFormat {
-    private const val ROUNDS = 200_000
+    internal const val ROUNDS = 200_000
     private val b64 = Base64.getEncoder()
     private val ub64 = Base64.getDecoder()
 
-    private fun key(passphrase: String, salt: ByteArray) =
-        SecretKeySpec(SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(PBEKeySpec(passphrase.toCharArray(), salt, ROUNDS, 256)).encoded, "AES")
+    internal fun deriveKey(passphrase: String, salt: ByteArray, rounds: Int) =
+        SecretKeySpec(SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(PBEKeySpec(passphrase.toCharArray(), salt, rounds, 256)).encoded, "AES")
+
+    private fun key(passphrase: String, salt: ByteArray) = deriveKey(passphrase, salt, ROUNDS)
 
     /** [data] is the backup's content as JSON text. A null or empty [passphrase] leaves it unencrypted. */
     fun seal(data: String, passphrase: String?): ByteArray {

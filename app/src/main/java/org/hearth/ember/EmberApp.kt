@@ -67,6 +67,7 @@ class EmberApp : Application(), ImageLoaderFactory {
         callNotifier = CallNotifier(this)
         callController = org.hearth.ember.call.CallController(this)
         notifier.createChannels()
+        scope.launch(kotlinx.coroutines.Dispatchers.Default) { org.hearth.ember.data.BackupScheduler.apply(this@EmberApp, backup.settings) }
         scope.launch { repo.ring.collect { if (it != null) ringer.start() else ringer.stop() } }
     }
 

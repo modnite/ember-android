@@ -66,6 +66,7 @@ fun LoginScreen() {
     var joining by remember { mutableStateOf(false) }
     var show by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
+    var restoring by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
     fun submit() {
@@ -163,7 +164,9 @@ fun LoginScreen() {
             TextButton(onClick = { joining = !joining; error = null }) {
                 Text(if (joining) "I already have an account" else "I have an invite code")
             }
+            TextButton(onClick = { restoring = true }) { Text("Restore from a backup") }
             Spacer(Modifier.height(24.dp))
         }
     }
+    if (restoring) org.hearth.ember.ui.settings.RestoreOnSignIn { restoring = false }
 }

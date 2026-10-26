@@ -73,6 +73,7 @@ dependencies {
     implementation("androidx.media3:media3-ui:1.4.1")
     implementation("androidx.media3:media3-datasource-okhttp:1.4.1")
     implementation("androidx.work:work-runtime-ktx:2.9.1")
+    implementation("androidx.documentfile:documentfile:1.0.1")
     implementation("io.livekit:livekit-android:2.23.0")
     implementation("androidx.core:core-telecom:1.0.0")
     implementation("com.google.crypto.tink:tink-android:1.15.0")
