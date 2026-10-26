@@ -108,11 +108,8 @@ import org.hearth.ember.ui.theme.EmberTheme
  * Leave the call screen, and only that. Ending a call pops the screen from the End button and again when the call turns idle; a plain
  * pop on the second time removed the chat list as well and left the app on a black, empty window.
  */
-fun NavHostController.leaveCall(endedIn: String? = null) {
-    if (currentDestination?.route?.startsWith("call/") != true) return
-    popBackStack()
-    // A call that ended lands in the chat it belongs to, also when it was answered from a ring and no chat was open behind it.
-    if (endedIn != null && currentBackStackEntry?.arguments?.getString("roomId") != endedIn) navigate("chat/$endedIn") { launchSingleTop = true }
+fun NavHostController.leaveCall() {
+    if (currentDestination?.route?.startsWith("call/") == true) popBackStack()
 }
 
 fun callRoutes(builder: NavGraphBuilder, nav: NavHostController) {
@@ -154,7 +151,7 @@ fun CallScreen(nav: NavHostController, roomId: String, video: Boolean, answer: B
     LaunchedEffect(state.phase, state.roomId) {
         if (state.phase != Phase.Idle) started = true
         // Only once this screen has seen a call begin: at the very start the state is Idle while the permission prompt is up.
-        else if (started) nav.leaveCall(roomId)
+        else if (started) nav.leaveCall()
     }
     // A call screen that never gets a call (restored after the call is long gone, a duplicate entry) must not sit there blank.
     LaunchedEffect(Unit) {
@@ -380,7 +377,7 @@ private fun InCall(controller: CallController, state: CallState, pip: Boolean, o
                     }
                 }
                 RoundButton(if (state.micOn) Icons.Filled.Mic else Icons.Filled.MicOff, if (state.micOn) "Mute" else "Unmute", off = !state.micOn, small = landscape) { controller.toggleMic() }
-                RoundButton(Icons.Filled.CallEnd, "End call", danger = true, small = landscape) { controller.hangup() }
+                RoundButton(Icons.Filled.CallEnd, "End call", danger = true, small = landscape) { controller.hangup(); onMinimize() }
             }
             if (landscape) {
                 // On its side the buttons stand in a column at the right edge, clear of the camera cut-out and the video's middle.
