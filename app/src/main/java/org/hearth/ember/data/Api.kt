@@ -119,6 +119,16 @@ class Api(private val store: SessionStore, val client: OkHttpClient) {
             ),
         ).user
 
+    /** A group's picture, shown to every member. */
+    suspend fun uploadRoomAvatar(roomId: String, bytes: ByteArray, mime: String): Room {
+        val form = MultipartBody.Builder().setType(MultipartBody.FORM)
+            .addFormDataPart("file", "group", bytes.toRequestBody(mime.toMediaType())).build()
+        return EmberJson.decodeFromString<RoomResponse>(execute(Request.Builder().url(url("/api/rooms/$roomId/avatar")).post(form).build())).room
+    }
+
+    suspend fun deleteRoomAvatar(roomId: String): Room =
+        EmberJson.decodeFromString<RoomResponse>(execute(Request.Builder().url(url("/api/rooms/$roomId/avatar")).delete().build())).room
+
     suspend fun uploadAvatar(bytes: ByteArray, mime: String): User {
         val form = MultipartBody.Builder().setType(MultipartBody.FORM)
             .addFormDataPart("file", "avatar", bytes.toRequestBody(mime.toMediaType())).build()

@@ -1,7 +1,16 @@
 package org.hearth.ember.ui.chat
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.ui.draw.clip
+import kotlinx.coroutines.withContext
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -59,6 +68,18 @@ fun RoomDetailsScreen(nav: NavHostController, roomId: String) {
     var editing by remember { mutableStateOf(false) }
     var leaving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var pictureMenu by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val pickPicture = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            runCatching {
+                val jpeg = withContext(kotlinx.coroutines.Dispatchers.IO) { groupPictureBytes(context, uri) }
+                app.api.uploadRoomAvatar(roomId, jpeg, "image/jpeg")
+                app.repo.refreshAll()
+            }.onFailure { error = it.message ?: "Could not set that picture." }
+        }
+    }
 
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
@@ -71,7 +92,24 @@ fun RoomDetailsScreen(nav: NavHostController, roomId: String) {
         LazyColumn(Modifier.fillMaxSize().widthIn(max = 720.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             item {
                 Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    RoomAvatar(room, meId, 112.dp, showStatus = false)
+                    // Anyone in a group can change its picture: a tap offers a new one, or none.
+                    Box(Modifier.then(if (!room.isDm) Modifier.clickable { pictureMenu = true } else Modifier)) {
+                        RoomAvatar(room, meId, 112.dp, showStatus = false)
+                        if (!room.isDm) Box(
+                            Modifier.align(Alignment.BottomEnd).size(34.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
+                            contentAlignment = Alignment.Center,
+                        ) { Icon(Icons.Filled.PhotoCamera, "Change picture", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onPrimary) }
+                        DropdownMenu(expanded = pictureMenu, onDismissRequest = { pictureMenu = false }) {
+                            DropdownMenuItem(text = { Text("Choose a picture") }, onClick = {
+                                pictureMenu = false
+                                pickPicture.launch(androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly))
+                            })
+                            if (room.avatar != null) DropdownMenuItem(text = { Text("Remove the picture") }, onClick = {
+                                pictureMenu = false
+                                scope.launch { runCatching { app.api.deleteRoomAvatar(roomId); app.repo.refreshAll() }.onFailure { error = it.message } }
+                            })
+                        }
+                    }
                     Spacer(Modifier.height(14.dp))
                     Text(room.title(meId), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                     val sub = if (room.isDm) room.other(meId)?.statusMessage.orEmpty() else room.topic
@@ -154,4 +192,19 @@ fun RoomDetailsScreen(nav: NavHostController, roomId: String) {
         },
         dismissButton = { TextButton(onClick = { leaving = false }) { Text("Cancel") } },
     )
+}
+
+/** A picture chosen for a group, cut to a centred square of at most 512 pixels and saved as JPEG, so it is small and looks right as a circle. */
+private fun groupPictureBytes(context: android.content.Context, uri: android.net.Uri): ByteArray {
+    val resolver = context.contentResolver
+    val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    resolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it, null, bounds) }
+    var sample = 1
+    while (minOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= 512) sample *= 2
+    val source = resolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it, null, android.graphics.BitmapFactory.Options().apply { inSampleSize = sample }) }
+        ?: throw IllegalStateException("Could not read that picture.")
+    val side = minOf(source.width, source.height)
+    val square = android.graphics.Bitmap.createBitmap(source, (source.width - side) / 2, (source.height - side) / 2, side, side)
+    val scaled = if (side > 512) android.graphics.Bitmap.createScaledBitmap(square, 512, 512, true) else square
+    return java.io.ByteArrayOutputStream().also { scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, it) }.toByteArray()
 }
