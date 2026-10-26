@@ -6,7 +6,10 @@ Package `org.hearth.ember`, minSdk 26, targetSdk 35. No Google services, no push
 
 ## What it does
 
-- Chats: direct and group, replies, reactions, edits, pins, forwarding, photos, files, voice notes, link previews, nudges.
+- Chats: direct and group, replies, reactions, edits, pins, forwarding, photos, videos, GIFs, stickers, files, voice notes, link previews, nudges. Tap or long press a message to pick it: a top bar offers reply, copy, forward and delete, and your most used reactions float beside it.
+- Photos and videos: take them with the camera button or pick them from the gallery, look at them and add a caption before they go. Videos play in the app (seeking, also in encrypted chats). A group's picture can be changed by anyone in it.
+- Stickers and GIFs: the face button opens emoji, stickers and GIFs. A sticker is made from any picture (512 px WebP, drawn without a bubble) or kept from a chat; GIFs are added from files and move in the chat.
+- Backup: to any number of places (a folder Android can reach, WebDAV or Nextcloud), by hand or daily, weekly or monthly, keeping the newest few, with your encryption key, settings and stickers and optionally a readable archive of your chats and their files. Encrypted with a passphrase unless you turn that off. A new phone restores from the sign-in screen. `tools/open_archive.py` opens an archive on a computer.
 - Contacts: add by username, accept requests, people only see contacts and shared rooms.
 - End-to-end encryption (Hearth E2EE v2): keys are set up per phone, chat text and files are sealed on the phone. Calls in encrypted chats are sealed with the same derived media key as the web app.
 - Calls: pre-call screen with camera, lenses (front, 0.6x, 1x, 3x) and mic check, one-to-one and group, screen sharing (1080p, 60 fps, 8 Mbps target), audio output choice, picture in picture with the system controls.
