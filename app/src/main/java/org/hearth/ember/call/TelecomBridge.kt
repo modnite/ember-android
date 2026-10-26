@@ -4,7 +4,9 @@ import android.net.Uri
 import android.telecom.DisconnectCause
 import android.util.Log
 import androidx.core.telecom.CallAttributesCompat
+import androidx.core.telecom.CallEndpointCompat
 import androidx.core.telecom.CallsManager
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -24,6 +26,25 @@ class TelecomBridge(private val app: EmberApp) {
     }
     private var job: Job? = null
     private var ended: CompletableDeferred<Unit>? = null
+    @Volatile private var endpoints: List<CallEndpointCompat> = emptyList()
+    private var routeRequests = Channel<CallEndpointCompat>(Channel.CONFLATED)
+
+    /**
+     * Ask the system to send the call's sound to the earpiece, speaker or headset. While the system holds the call, it owns the route
+     * (Samsung's call audio controller overrides anything the app sets on the audio manager), so the move has to be requested here.
+     * Returns false when there is no such endpoint (or no system call), and the caller falls back to the audio manager.
+     */
+    fun route(type: Int): Boolean {
+        val target = endpoints.firstOrNull { it.type == type } ?: return false
+        return routeRequests.trySend(target).isSuccess
+    }
+
+    companion object {
+        const val EARPIECE = CallEndpointCompat.TYPE_EARPIECE
+        const val SPEAKER = CallEndpointCompat.TYPE_SPEAKER
+        const val BLUETOOTH = CallEndpointCompat.TYPE_BLUETOOTH
+        const val WIRED = CallEndpointCompat.TYPE_WIRED_HEADSET
+    }
 
     /**
      * [onEndedBySystem]: a watch, headset or car ended the call. [onSystemMute]: the system's microphone mute changed (true = muted).
@@ -32,6 +53,9 @@ class TelecomBridge(private val app: EmberApp) {
         end()
         val done = CompletableDeferred<Unit>()
         ended = done
+        endpoints = emptyList()
+        routeRequests = Channel(Channel.CONFLATED)
+        val requests = routeRequests
         job = app.scope.launch {
             runCatching {
                 val attributes = CallAttributesCompat(
@@ -52,6 +76,8 @@ class TelecomBridge(private val app: EmberApp) {
                     launch {
                         Log.d("Telecom", "setActive -> ${setActive()}")
                         launch { isMuted.collect { onSystemMute(it) } }
+                        launch { availableEndpoints.collect { endpoints = it } }
+                        launch { for (target in requests) Log.d("Telecom", "route to ${target.name} -> ${requestEndpointChange(target)}") }
                         done.await()
                         Log.d("Telecom", "app ended the call, disconnecting")
                         disconnect(DisconnectCause(DisconnectCause.LOCAL))
@@ -66,5 +92,7 @@ class TelecomBridge(private val app: EmberApp) {
         ended?.complete(Unit)
         ended = null
         job = null
+        endpoints = emptyList()
+        routeRequests.close()
     }
 }

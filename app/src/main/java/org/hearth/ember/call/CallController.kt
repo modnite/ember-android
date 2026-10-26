@@ -260,6 +260,7 @@ class CallController(private val app: EmberApp) {
     fun selectOutput(output: CallOutput) {
         val device = audio.availableAudioDevices.firstOrNull { it.name == output.id } ?: return
         wantSpeaker = output.kind == CallOutput.Kind.Speaker
+        telecomRoute(device)
         audio.selectDevice(device)
         refreshOutputs()
     }
@@ -271,8 +272,20 @@ class CallController(private val app: EmberApp) {
             ?: audio.availableAudioDevices.firstOrNull { it is AudioDevice.Earpiece }
         val now = audio.selectedAudioDevice
         val target = if (now is AudioDevice.Speakerphone) quiet else speaker
-        if (target != null) { wantSpeaker = target is AudioDevice.Speakerphone; audio.selectDevice(target) }
+        if (target != null) { wantSpeaker = target is AudioDevice.Speakerphone; telecomRoute(target); audio.selectDevice(target) }
         refreshOutputs()
+    }
+
+    /** The system call owns the route while it holds the call, so a move is requested from it as well as from the audio manager. */
+    private fun telecomRoute(device: AudioDevice) {
+        telecom.route(
+            when (device) {
+                is AudioDevice.Speakerphone -> TelecomBridge.SPEAKER
+                is AudioDevice.BluetoothHeadset -> TelecomBridge.BLUETOOTH
+                is AudioDevice.WiredHeadset -> TelecomBridge.WIRED
+                else -> TelecomBridge.EARPIECE
+            },
+        )
     }
 
     private fun refreshOutputs() {

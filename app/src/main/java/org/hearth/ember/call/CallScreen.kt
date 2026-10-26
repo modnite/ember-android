@@ -104,6 +104,14 @@ import org.hearth.ember.ui.components.Avatar
 import org.hearth.ember.ui.components.parseColor
 import org.hearth.ember.ui.theme.EmberTheme
 
+/**
+ * Leave the call screen, and only that. Ending a call pops the screen from the End button and again when the call turns idle; a plain
+ * pop on the second time removed the chat list as well and left the app on a black, empty window.
+ */
+fun NavHostController.leaveCall() {
+    if (currentDestination?.route?.startsWith("call/") == true) popBackStack()
+}
+
 fun callRoutes(builder: NavGraphBuilder, nav: NavHostController) {
     builder.composable(
         "call/{roomId}?video={video}&answer={answer}",
@@ -130,7 +138,7 @@ fun CallScreen(nav: NavHostController, roomId: String, video: Boolean, answer: B
 
     val perms = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
         val micOk = granted[Manifest.permission.RECORD_AUDIO] == true
-        if (!micOk) { nav.popBackStack(); return@rememberLauncherForActivityResult }
+        if (!micOk) { nav.leaveCall(); return@rememberLauncherForActivityResult }
         controller.openLobby(roomId, video && granted[Manifest.permission.CAMERA] == true)
         if (answer) controller.go(answer = true)
     }
@@ -143,22 +151,22 @@ fun CallScreen(nav: NavHostController, roomId: String, video: Boolean, answer: B
     LaunchedEffect(state.phase, state.roomId) {
         if (state.phase != Phase.Idle) started = true
         // Only once this screen has seen a call begin: at the very start the state is Idle while the permission prompt is up.
-        else if (started) nav.popBackStack()
+        else if (started) nav.leaveCall()
     }
     // A call screen that never gets a call (restored after the call is long gone, a duplicate entry) must not sit there blank.
     LaunchedEffect(Unit) {
         delay(3000)
-        if (!started && controller.state.value.phase == Phase.Idle) nav.popBackStack()
+        if (!started && controller.state.value.phase == Phase.Idle) nav.leaveCall()
     }
     // Back while on a call: float it, like Element and WhatsApp, instead of ending it.
     // Back from a call goes back to the chats with the call still running (a bar across the top returns to it); leaving the app floats it.
-    BackHandler(enabled = state.phase == Phase.Connected) { nav.popBackStack() }
-    BackHandler(enabled = state.phase == Phase.Lobby) { controller.hangup(); nav.popBackStack() }
+    BackHandler(enabled = state.phase == Phase.Connected) { nav.leaveCall() }
+    BackHandler(enabled = state.phase == Phase.Lobby) { controller.hangup(); nav.leaveCall() }
 
     Box(Modifier.fillMaxSize().background(EmberTheme.colors.callBackground)) {
         when (state.phase) {
-            Phase.Lobby, Phase.Failed -> Lobby(controller, state, answer) { nav.popBackStack() }
-            Phase.Connecting, Phase.Connected -> InCall(controller, state, pip) { nav.popBackStack() }
+            Phase.Lobby, Phase.Failed -> Lobby(controller, state, answer) { nav.leaveCall() }
+            Phase.Connecting, Phase.Connected -> InCall(controller, state, pip) { nav.leaveCall() }
             Phase.Idle -> {}
         }
     }

@@ -1,5 +1,6 @@
 package org.hearth.ember
 
+import kotlinx.coroutines.launch
 import android.app.Application
 import coil.ImageLoader
 import coil.ImageLoaderFactory
@@ -36,6 +37,7 @@ class EmberApp : Application(), ImageLoaderFactory {
 
     /** Something another app asked to send through Ember; the "Send to" screen picks it up and clears it. */
     val share = kotlinx.coroutines.flow.MutableStateFlow<org.hearth.ember.ui.chat.SharePayload?>(null)
+    val ringer by lazy { org.hearth.ember.notify.HeadsetRinger(this) }
     val sounds by lazy { org.hearth.ember.notify.SoundPlayer(this) }
     val updater by lazy { org.hearth.ember.data.Updater(this, client, BuildConfig.UPDATE_REPO, BuildConfig.VERSION_NAME) }
     val backup by lazy { org.hearth.ember.data.BackupService(this, this) }
@@ -63,6 +65,7 @@ class EmberApp : Application(), ImageLoaderFactory {
         callNotifier = CallNotifier(this)
         callController = org.hearth.ember.call.CallController(this)
         notifier.createChannels()
+        scope.launch { repo.ring.collect { if (it != null) ringer.start() else ringer.stop() } }
     }
 
     /** Pictures come from the Hearth server, which wants the session cookie: the same client serves them. */

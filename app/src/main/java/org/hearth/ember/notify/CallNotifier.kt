@@ -64,10 +64,12 @@ class CallNotifier(private val context: Context) {
             builder.addAction(0, "Decline", decline).addAction(0, "Answer", answer)
         }
         manager.notify("call:$roomId", CALL_ID, builder.build().apply { flags = flags or android.app.Notification.FLAG_INSISTENT }) // rings until answered or declined
+        context.ember.ringer.start()
     }
 
     fun stop(roomId: String) {
         manager.cancel("call:$roomId", CALL_ID)
+        context.ember.ringer.stop()
     }
 
     companion object {
