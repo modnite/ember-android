@@ -63,7 +63,7 @@ class Updater(private val context: Context, private val client: OkHttpClient, pr
     suspend fun check(): Result<UpdateInfo?> = withContext(Dispatchers.IO) {
         runCatching {
             val request = Request.Builder().url("https://api.github.com/repos/$repo/releases/latest").header("Accept", "application/vnd.github+json").build()
-            val body = client.newBuilder().cookieJar(okhttp3.CookieJar.NO_COOKIES).build().newCall(request).execute().use { r ->
+            val body = client.newBuilder().cookieJar(okhttp3.CookieJar.NO_COOKIES).followRedirects(true).followSslRedirects(true).build().newCall(request).execute().use { r ->
                 if (r.code == 404) return@use null
                 if (!r.isSuccessful) throw BackupException("GitHub answered ${r.code}.")
                 r.body?.string()
@@ -85,24 +85,7 @@ class Updater(private val context: Context, private val client: OkHttpClient, pr
     suspend fun download(info: UpdateInfo, onProgress: (Float) -> Unit): File = withContext(Dispatchers.IO) {
         val dir = File(context.cacheDir, "updates").also { it.mkdirs(); it.listFiles()?.forEach { f -> f.delete() } }
         val file = File(dir, "Ember-${info.version}.apk")
-        client.newBuilder().cookieJar(okhttp3.CookieJar.NO_COOKIES).callTimeout(0, java.util.concurrent.TimeUnit.SECONDS).build()
-            .newCall(Request.Builder().url(info.apkUrl).build()).execute().use { r ->
-                if (!r.isSuccessful) throw BackupException("The download failed (${r.code}).")
-                val total = (r.body?.contentLength() ?: info.size).takeIf { it > 0 } ?: info.size
-                r.body!!.byteStream().use { input ->
-                    file.outputStream().use { out ->
-                        val buffer = ByteArray(64 * 1024)
-                        var done = 0L
-                        while (true) {
-                            val n = input.read(buffer)
-                            if (n < 0) break
-                            out.write(buffer, 0, n)
-                            done += n
-                            if (total > 0) onProgress((done.toFloat() / total).coerceIn(0f, 1f))
-                        }
-                    }
-                }
-            }
+        fetch(client, info.apkUrl, file, info.size, onProgress)
         file
     }
 
@@ -113,5 +96,30 @@ class Updater(private val context: Context, private val client: OkHttpClient, pr
             Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive")
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK),
         )
+    }
+
+    companion object {
+        /** Fetch [url] into [file]. GitHub answers a release download with a redirect to its file storage, so redirects are followed here (the app's own client does not follow them). */
+        fun fetch(client: OkHttpClient, url: String, file: File, expected: Long, onProgress: (Float) -> Unit) {
+            client.newBuilder().cookieJar(okhttp3.CookieJar.NO_COOKIES).followRedirects(true).followSslRedirects(true)
+                .callTimeout(0, java.util.concurrent.TimeUnit.SECONDS).build()
+                .newCall(Request.Builder().url(url).build()).execute().use { r ->
+                    if (!r.isSuccessful) throw BackupException("The download failed (${r.code}).")
+                    val total = (r.body?.contentLength() ?: expected).takeIf { it > 0 } ?: expected
+                    r.body!!.byteStream().use { input ->
+                        file.outputStream().use { out ->
+                            val buffer = ByteArray(64 * 1024)
+                            var done = 0L
+                            while (true) {
+                                val n = input.read(buffer)
+                                if (n < 0) break
+                                out.write(buffer, 0, n)
+                                done += n
+                                if (total > 0) onProgress((done.toFloat() / total).coerceIn(0f, 1f))
+                            }
+                        }
+                    }
+                }
+        }
     }
 }
