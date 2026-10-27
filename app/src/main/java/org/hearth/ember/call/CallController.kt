@@ -160,7 +160,16 @@ class CallController(private val app: EmberApp) {
                 videoEncoding = io.livekit.android.room.track.VideoEncoding(8_000_000, 60), simulcast = false,
             ),
         )
-        val r = LiveKit.create(app, share, LiveKitOverrides(audioOptions = AudioOptions(audioHandler = audio)))
+        val r = LiveKit.create(app, share, LiveKitOverrides(
+            audioOptions = AudioOptions(
+                audioHandler = audio,
+                // The phone's built-in echo canceller and noise suppressor are skipped (unless chosen in Settings): when they fail, on speakerphone
+                // above all, the other person hears their own voice back. WebRTC's software ones take over.
+                javaAudioDeviceModuleCustomizer = { b ->
+                    if (!app.prefs.deviceEcho.value) b.setUseHardwareAcousticEchoCanceler(false).setUseHardwareNoiseSuppressor(false)
+                },
+            ),
+        ))
         room = r
         job = app.scope.launch { r.events.events.collect { onEvent(it) } }
         return r

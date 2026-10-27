@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.Hearing
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -232,6 +233,12 @@ private fun SoundsPage() {
             ActionRow(Icons.Filled.Notifications, "Use Ember's own sounds", "Go back to the default chime and ringtone") {
                 app.prefs.setMessageSound(null); app.prefs.setCallSound(null); app.notifier.createChannels()
             }
+            val deviceEcho by app.prefs.deviceEcho.collectAsState()
+            ToggleRow(
+                Icons.Filled.Hearing, "Phone's own echo cancelling in calls",
+                "Off: Ember cancels echo itself, which copes with speakerphone best. Turn on if others say your voice sounds wrong. From the next call.",
+                deviceEcho,
+            ) { app.prefs.setDeviceEcho(it) }
             ActionRow(Icons.Filled.Notifications, "Send a test notification", "Shows a message alert with your chosen sound") { app.notifier.test() }
             ActionRow(Icons.Filled.Notifications, "Play the ringtone", "Plays it for a few seconds") {
                 val uri = when (callSound) { null -> Uri.parse("android.resource://" + context.packageName + "/" + org.hearth.ember.R.raw.ember_ring); "silent" -> null; else -> Uri.parse(callSound) }
