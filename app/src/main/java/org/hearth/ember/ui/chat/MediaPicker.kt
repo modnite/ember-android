@@ -65,7 +65,9 @@ private sealed interface Results {
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun MediaPicker(kind: MediaKind, onSendFavourite: (File) -> Unit, onSendOnline: (OnlineItem) -> Unit, onOpenSettings: () -> Unit) {
+fun MediaPicker(
+    kind: MediaKind, onSendFavourite: (File) -> Unit, onSendOnline: (OnlineItem) -> Unit, onSendBytes: (ByteArray, String, String) -> Unit, onOpenSettings: () -> Unit,
+) {
     val context = LocalContext.current
     val app = context.ember
     val scope = rememberCoroutineScope()
@@ -78,7 +80,7 @@ fun MediaPicker(kind: MediaKind, onSendFavourite: (File) -> Unit, onSendOnline: 
     val source = sources.firstOrNull { it.id == selected }
 
     LaunchedEffect(selected, query, source) {
-        if (source == null || !source.ready()) return@LaunchedEffect
+        if (source == null || !source.ready() || source is org.hearth.ember.data.SignalSource) return@LaunchedEffect
         results = Results.Loading
         if (query.isNotBlank()) delay(400)
         results = try {
@@ -88,6 +90,11 @@ fun MediaPicker(kind: MediaKind, onSendFavourite: (File) -> Unit, onSendOnline: 
         } catch (e: Exception) {
             Results.Failed(e.message ?: "The search failed.")
         }
+    }
+
+    fun keepBytes(bytes: ByteArray) {
+        if (kind == MediaKind.Sticker) app.stickers.add(bytes) else app.gifs.add(bytes)
+        Toast.makeText(context, "Added to your favourites", Toast.LENGTH_SHORT).show()
     }
 
     fun keep(item: OnlineItem) {
@@ -115,7 +122,7 @@ fun MediaPicker(kind: MediaKind, onSendFavourite: (File) -> Unit, onSendOnline: 
         }
         OutlinedTextField(
             value = query, onValueChange = { query = it }, singleLine = true, leadingIcon = { Icon(Icons.Filled.Search, null) },
-            placeholder = { Text("Search ${source.label}") }, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+            placeholder = { Text(if (source is org.hearth.ember.data.SignalSource) "Search packs (cat, meme, hello…)" else "Search ${source.label}") }, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
         )
         if (!source.ready()) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp)) {
@@ -125,6 +132,10 @@ fun MediaPicker(kind: MediaKind, onSendFavourite: (File) -> Unit, onSendOnline: 
                 )
                 TextButton(onClick = onOpenSettings) { Text("Add your key") }
             }
+            return@Column
+        }
+        if (source is org.hearth.ember.data.SignalSource) {
+            SignalPicker(source.signal, query, tile, gridMax, onSendBytes, ::keepBytes)
             return@Column
         }
         when (val r = results) {

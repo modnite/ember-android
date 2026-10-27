@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -81,12 +82,14 @@ fun SettingsTab(nav: NavHostController) {
     val me by app.repo.me.collectAsState()
     var signOutDialog by remember { mutableStateOf(false) }
 
-    Column(Modifier.fillMaxSize()) {
-        TopAppBar(
-            title = { Text("Settings", fontWeight = FontWeight.Bold) },
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
-        )
+    // The title scrolls away with the list: sideways there is hardly any height to spare, and the rows should have it.
+    Column(Modifier.fillMaxSize().statusBarsPadding()) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+            TopAppBar(
+                title = { Text("Settings", fontWeight = FontWeight.Bold) },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+                windowInsets = androidx.compose.foundation.layout.WindowInsets(0),
+            )
             Row(
                 Modifier.fillMaxWidth().clickable { nav.navigate("profile") }.padding(horizontal = 20.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,

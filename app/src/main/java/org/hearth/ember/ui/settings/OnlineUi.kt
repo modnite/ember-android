@@ -33,15 +33,19 @@ fun OnlineRows() {
         "In a chat, open the face button, then Stickers or GIFs, and pick a place to search. Tap a result to send it, press and hold to keep it in your favourites.",
         style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
     )
-    Heading("Works as it is")
+    Heading("Works as it is, no signup")
     Text(
-        "Animated emoji (Google's Noto set, as stickers) and Wikimedia Commons (GIFs) need nothing from you.",
+        "Stickers: Signal's public sticker packs (thousands of community packs) and Google's animated emoji. GIFs: anime reaction GIFs (nekos.best) and Wikimedia Commons.",
         style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
     )
-    Heading("Giphy: GIFs and stickers")
+    Text(
+        "The big GIF libraries (Giphy, Imgur) refuse anyone without a key. If you want them anyway, a free key of your own goes here.",
+        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+    )
+    Heading("Giphy: GIFs and stickers (optional)")
     KeyField(giphy, "Giphy API key", "Paste the key here") { giphy = it; settings.giphyKey = it }
     TextButton(onClick = { open("https://developers.giphy.com/dashboard/") }, modifier = Modifier.padding(horizontal = 12.dp)) { Text("Get a free Giphy key") }
-    Heading("Imgur: GIFs")
+    Heading("Imgur: GIFs (optional)")
     KeyField(imgur, "Imgur client ID", "Paste the client ID here") { imgur = it; settings.imgurId = it }
     TextButton(onClick = { open("https://api.imgur.com/oauth2/addclient") }, modifier = Modifier.padding(horizontal = 12.dp)) { Text("Register for a free Imgur client ID") }
     Text(

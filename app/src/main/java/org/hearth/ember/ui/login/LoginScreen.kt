@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -47,12 +49,14 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import org.hearth.ember.data.ApiException
 import org.hearth.ember.ember
 
 /** Sign in to a Hearth server, or join one with an invite. The server address is remembered, so after the first time it is just the name and password. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun LoginScreen() {
     val context = LocalContext.current
@@ -96,23 +100,29 @@ fun LoginScreen() {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            Spacer(Modifier.height(32.dp))
-            Box(
-                Modifier.size(84.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(Icons.Filled.LocalFireDepartment, null, tint = Color.White, modifier = Modifier.size(48.dp))
+            // With the keyboard up, or sideways, the logo makes way so the form and the button are all in view.
+            val compact = WindowInsets.isImeVisible || LocalConfiguration.current.screenHeightDp < 520
+            Spacer(Modifier.height(if (compact) 8.dp else 32.dp))
+            if (!compact) {
+                Box(
+                    Modifier.size(84.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Filled.LocalFireDepartment, null, tint = Color.White, modifier = Modifier.size(48.dp))
+                }
+                Spacer(Modifier.height(20.dp))
             }
-            Spacer(Modifier.height(20.dp))
-            Text("Ember", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(6.dp))
-            Text(
-                if (joining) "Join your friends' server with the invite code they sent you." else "Private messaging on your own server.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-            )
-            Spacer(Modifier.height(28.dp))
+            Text("Ember", style = if (compact) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+            if (!compact) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    if (joining) "Join your friends' server with the invite code they sent you." else "Private messaging on your own server.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                )
+            }
+            Spacer(Modifier.height(if (compact) 12.dp else 28.dp))
 
             OutlinedTextField(
                 value = server, onValueChange = { server = it }, label = { Text("Server") }, singleLine = true,

@@ -255,6 +255,15 @@ fun ChatScreen(nav: NavHostController, roomId: String, embedded: Boolean = false
             sending = false
         }
     }
+    fun sendReady(bytes: ByteArray, name: String, mime: String) {
+        emojiForDraft = false
+        scope.launch {
+            sending = true
+            runCatching { app.repo.sendBytes(roomId, bytes, name, mime) }.onSuccess { app.sounds.play(org.hearth.ember.notify.SoundPlayer.Kind.Out) }.onFailure { notice = it.message }
+            sending = false
+        }
+    }
+
     fun sendOnline(item: org.hearth.ember.data.OnlineItem, kind: MediaKind) {
         emojiForDraft = false
         scope.launch {
@@ -482,7 +491,7 @@ fun ChatScreen(nav: NavHostController, roomId: String, embedded: Boolean = false
     if (emojiForDraft) EmojiSheet(
         onDismiss = { emojiForDraft = false },
         onSticker = { f -> sendFavourite(f, "image/webp") }, onGif = { f -> sendFavourite(f, "image/gif") },
-        onOnline = { item, kind -> sendOnline(item, kind) },
+        onOnline = { item, kind -> sendOnline(item, kind) }, onBytes = { bytes, name, mime -> sendReady(bytes, name, mime) },
         onSettings = { emojiForDraft = false; nav.navigate("settings/online") },
     ) { e -> draft += e }
     outgoing?.let { list ->
@@ -741,7 +750,8 @@ private val AllEmoji: List<EmojiItem> by lazy {
 @Composable
 private fun EmojiSheet(
     onDismiss: () -> Unit, onSticker: ((File) -> Unit)? = null, onGif: ((File) -> Unit)? = null,
-    onOnline: ((org.hearth.ember.data.OnlineItem, MediaKind) -> Unit)? = null, onSettings: () -> Unit = {}, onPick: (String) -> Unit,
+    onOnline: ((org.hearth.ember.data.OnlineItem, MediaKind) -> Unit)? = null, onBytes: (ByteArray, String, String) -> Unit = { _, _, _ -> },
+    onSettings: () -> Unit = {}, onPick: (String) -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
     var tab by remember { mutableStateOf(0) }
@@ -754,8 +764,8 @@ private fun EmojiSheet(
         if (onSticker != null && onGif != null) androidx.compose.material3.TabRow(selectedTabIndex = section, containerColor = Color.Transparent) {
             listOf("Emoji", "Stickers", "GIFs").forEachIndexed { i, name -> androidx.compose.material3.Tab(selected = section == i, onClick = { section = i }, text = { Text(name) }) }
         }
-        if (section == 1 && onSticker != null) { MediaPicker(MediaKind.Sticker, onSticker, { onOnline?.invoke(it, MediaKind.Sticker) }, onSettings); return@ModalBottomSheet }
-        if (section == 2 && onGif != null) { MediaPicker(MediaKind.Gif, onGif, { onOnline?.invoke(it, MediaKind.Gif) }, onSettings); return@ModalBottomSheet }
+        if (section == 1 && onSticker != null) { MediaPicker(MediaKind.Sticker, onSticker, { onOnline?.invoke(it, MediaKind.Sticker) }, onBytes, onSettings); return@ModalBottomSheet }
+        if (section == 2 && onGif != null) { MediaPicker(MediaKind.Gif, onGif, { onOnline?.invoke(it, MediaKind.Gif) }, onBytes, onSettings); return@ModalBottomSheet }
         OutlinedTextField(
             value = query, onValueChange = { query = it }, singleLine = true, placeholder = { Text("Search emoji (heart, cat, pizza…)") },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),

@@ -120,6 +120,16 @@ object OnlineParsing {
         }.sortedBy { it.title }
     }
 
+    /** nekos.best's `results`: an animated GIF each, named by anime. */
+    fun nekos(json: String, category: String): List<OnlineItem> {
+        val results = runCatching { parser.parseToJsonElement(json).jsonObject["results"] as? JsonArray }.getOrNull() ?: return emptyList()
+        return results.mapNotNull { e ->
+            val o = e.obj() ?: return@mapNotNull null
+            val url = o["url"].text() ?: return@mapNotNull null
+            OnlineItem(url.substringAfterLast('/').substringBefore('.'), url, url, "gif", listOfNotNull(category, o["anime_name"].text()).joinToString(" · "))
+        }
+    }
+
     /** The animated emoji list: `code<TAB>unicode name` per line. */
     fun animatedEmoji(lines: List<String>): List<Pair<String, String>> = lines.mapNotNull { l ->
         val parts = l.split('\t', limit = 2)
@@ -180,6 +190,41 @@ private class CommonsSource(private val client: OkHttpClient, private val settin
     }
 }
 
+/** Reaction GIFs from nekos.best: no key, sorted by what they show (hug, laugh, dance…). A search picks the matching kinds; no search gives a mix. */
+private class ReactionsSource(private val client: OkHttpClient) : OnlineSource {
+    override val id = "reactions"
+    override val label = "Anime reactions"
+    override val kinds = setOf(MediaKind.Gif)
+    override fun ready() = true
+    private val popular = listOf("laugh", "hug", "dance", "wave", "smile", "thumbsup", "happy", "wink", "cry", "nod", "shrug", "facepalm")
+    private var categories: List<String>? = null
+
+    private fun categories(): List<String> = categories ?: runCatching {
+        val json = client.fetch(Request.Builder().url("https://nekos.best/api/v2/endpoints").header("User-Agent", "Ember (Hearth messenger)").build())
+        EmberJson.parseToJsonElement(json).jsonObject.filter { (it.value as? JsonObject)?.get("format")?.jsonPrimitive?.content == "gif" }.keys.toList()
+    }.getOrDefault(popular).also { categories = it }
+
+    private fun one(category: String, amount: Int): List<OnlineItem> =
+        OnlineParsing.nekos(client.fetch(Request.Builder().url("https://nekos.best/api/v2/${enc(category)}?amount=$amount").header("User-Agent", "Ember (Hearth messenger)").build()), category)
+
+    override suspend fun search(kind: MediaKind, query: String): List<OnlineItem> = withContext(Dispatchers.IO) {
+        val q = query.trim().lowercase()
+        if (q.isEmpty()) return@withContext popular.flatMap { runCatching { one(it, 4) }.getOrDefault(emptyList()) }
+        val matching = categories().filter { it.contains(q) || q.contains(it) }.take(3)
+        if (matching.isEmpty()) throw OnlineException("No reactions for that. Try: ${categories().take(10).joinToString(", ")}.")
+        matching.flatMap { one(it, 20 / matching.size) }
+    }
+}
+
+/** Signal's public sticker packs. The picker draws these itself (packs, then the stickers in one), so there is nothing to list here. */
+class SignalSource(val signal: SignalStickers) : OnlineSource {
+    override val id = "signal"
+    override val label = "Signal packs"
+    override val kinds = setOf(MediaKind.Sticker)
+    override fun ready() = true
+    override suspend fun search(kind: MediaKind, query: String): List<OnlineItem> = emptyList()
+}
+
 /** Google's animated Noto emoji: no key, always on. The grid shows the phone's own emoji; the animation is fetched when one is sent. */
 private class AnimatedEmojiSource(private val context: Context) : OnlineSource {
     override val id = "emoji"
@@ -204,7 +249,13 @@ private class AnimatedEmojiSource(private val context: Context) : OnlineSource {
 /** Every place that can be searched, and the download of a chosen result. */
 class OnlineMedia(context: Context, private val client: OkHttpClient) {
     val settings = OnlineSettings(context)
-    val sources: List<OnlineSource> = listOf(GiphySource(client, settings), ImgurSource(client, settings), CommonsSource(client, settings), AnimatedEmojiSource(context))
+    val signal = SignalStickers(context, client)
+
+    /** The places that need nothing from you come first; Giphy and Imgur only work once you give them a key of your own. */
+    val sources: List<OnlineSource> = listOf(
+        SignalSource(signal), AnimatedEmojiSource(context), ReactionsSource(client), CommonsSource(client, settings),
+        GiphySource(client, settings), ImgurSource(client, settings),
+    )
 
     fun sourcesFor(kind: MediaKind) = sources.filter { kind in it.kinds }
 
