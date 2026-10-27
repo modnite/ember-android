@@ -42,7 +42,8 @@ class SoundPlayer(private val context: Context) {
     }
 
     // ------------------------------------------------------------------ the nudge: the classic sound, fetched from your own server once and kept
-    private val nudgeFile = java.io.File(context.cacheDir, "nudge.mp3")
+    // The file name carries a version: an older, much quieter nudge.mp3 may be sitting in the cache and would otherwise be kept for ever.
+    private val nudgeFile = java.io.File(context.cacheDir, "nudge-v2.mp3").also { java.io.File(context.cacheDir, "nudge.mp3").delete() }
     private val nudgeVoices = java.util.concurrent.atomic.AtomicInteger(0)
     @Volatile private var fetching = false
 
@@ -60,6 +61,7 @@ class SoundPlayer(private val context: Context) {
             player.setDataSource(nudgeFile.absolutePath)
             player.setOnCompletionListener { it.release(); nudgeVoices.decrementAndGet() }
             player.setOnErrorListener { mp, _, _ -> mp.release(); nudgeVoices.decrementAndGet(); true }
+            player.setVolume(1f, 1f)
             player.setOnPreparedListener { it.start() }
             player.prepareAsync()
         }.onFailure { nudgeVoices.decrementAndGet() }

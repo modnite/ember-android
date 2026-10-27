@@ -192,10 +192,11 @@ fun ChatScreen(nav: NavHostController, roomId: String, embedded: Boolean = false
     }
     val quick by app.prefs.quickReactions.collectAsState()
     val reactWith: suspend (Message, String) -> Unit = { m, e -> app.prefs.useEmoji(e); app.repo.react(m, e) }
-    // Nudge as often as you like: the chat shakes every time. The server only turns the first one a minute into a notification, and a nudge
-    // never adds a line to the conversation.
+    // Nudge as often as you like: the chat shakes every time. The server only turns the first one a minute into a notification. A nudge
+    // is shown as a line in the chat ("You sent a nudge") but is never a message.
     val sendNudge: () -> Unit = {
         app.realtime.nudge(roomId)
+        app.repo.noteNudge(roomId, app.repo.me.value?.id ?: "")
         buzz(context)
         app.sounds.nudge()
         scope.launch { for (step in listOf(10f, -10f, 6f, -6f, 0f)) shake.animateTo(step, androidx.compose.animation.core.tween(50)) }
@@ -209,9 +210,23 @@ fun ChatScreen(nav: NavHostController, roomId: String, embedded: Boolean = false
 
     // The list is newest-first (reverse layout), so index 0 is the bottom.
     val reversed = remember(messages) { messages.asReversed() }
+    // The nudge lines sit among the messages by time, newest first like the messages.
+    val nudgeNotes by app.repo.nudgeNotes.collectAsState()
+    val roomNotes = nudgeNotes[roomId].orEmpty()
+    val timeline = remember(reversed, roomNotes) {
+        val out = ArrayList<Any>(reversed.size + roomNotes.size)
+        var m = 0
+        var n = 0
+        while (m < reversed.size || n < roomNotes.size) {
+            val takeNote = n < roomNotes.size && (m >= reversed.size || roomNotes[n].at >= reversed[m].createdAt)
+            if (takeNote) out.add(roomNotes[n++]) else out.add(reversed[m++])
+        }
+        out
+    }
+    val reversedIndex = remember(reversed) { reversed.withIndex().associate { it.value.id to it.index } }
     val pickedMessages = remember(messages, picked) { picked.mapNotNull { id -> messages.firstOrNull { it.id == id } } }
     val atBottom by remember { derivedStateOf { listState.firstVisibleItemIndex <= 1 } }
-    LaunchedEffect(reversed.firstOrNull()?.id) { if (atBottom) listState.animateScrollToItem(0) }
+    LaunchedEffect(timeline.firstOrNull().let { (it as? Message)?.id ?: (it as? org.hearth.ember.data.Repository.NudgeNote)?.id }) { if (atBottom) listState.animateScrollToItem(0) }
     LaunchedEffect(listState, reversed.size) {
         androidx.compose.runtime.snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }.collect { last ->
             if (reversed.isNotEmpty() && last >= reversed.size - 4) app.repo.loadOlder(roomId)
@@ -396,17 +411,34 @@ fun ChatScreen(nav: NavHostController, roomId: String, embedded: Boolean = false
             colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
         )
 
-        // A live call in this chat, one tap to join.
-        calls[roomId]?.let { call ->
+        // A call in this chat, as the web client's bar shows it: what state it is in and who is really in it, one tap to join. Nothing about who
+        // placed it once it is going, and nothing at all while this phone is already in it (the bar across the top of the app returns to it).
+        val inCallHere = app.callController?.state?.collectAsState()?.value?.let { it.roomId == roomId && (it.phase == org.hearth.ember.call.Phase.Connected || it.phase == org.hearth.ember.call.Phase.Connecting) } == true
+        val users by app.repo.users.collectAsState()
+        calls[roomId]?.takeIf { !inCallHere }?.let { call ->
+            val meId = me?.id
+            val mineElsewhere = meId != null && meId in call.participants
+            val names = call.participants.map { id -> if (id == meId) "You" else users[id]?.displayName ?: "Someone" }
             Surface(color = EmberTheme.colors.online.copy(alpha = 0.15f), modifier = Modifier.fillMaxWidth().clickable { nav.navigate("call/$roomId?video=false") }) {
                 Row(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Filled.Call, null, tint = EmberTheme.colors.online, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(10.dp))
-                    Text(
-                        if (call.participants.size <= 1) "${call.startedByName} is calling" else "${call.participants.size} people in a call",
-                        modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium,
-                    )
-                    Text("Join", color = EmberTheme.colors.online, fontWeight = FontWeight.Bold)
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            when {
+                                call.ringing && call.startedBy.substringBefore(':') == meId -> "Ringing…"
+                                call.ringing -> "${call.startedByName} is calling"
+                                call.participants.isEmpty() -> "Call ended"
+                                else -> "Call in progress"
+                            },
+                            style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium,
+                        )
+                        if (!call.ringing && names.isNotEmpty()) Text(
+                            names.take(3).joinToString(", ") + (if (names.size > 3) " +${names.size - 3}" else ""),
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    Text(if (mineElsewhere) "Switch" else "Join", color = EmberTheme.colors.online, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -416,7 +448,13 @@ fun ChatScreen(nav: NavHostController, roomId: String, embedded: Boolean = false
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { androidx.compose.material3.CircularProgressIndicator() }
             } else {
                 LazyColumn(state = listState, reverseLayout = true, modifier = Modifier.fillMaxHeight().widthIn(max = 880.dp).fillMaxWidth(), contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp)) {
-                    itemsIndexed(reversed, key = { _, m -> m.id }) { index, message ->
+                    itemsIndexed(timeline, key = { _, e -> if (e is Message) e.id else (e as org.hearth.ember.data.Repository.NudgeNote).id }) { _, entry ->
+                        if (entry is org.hearth.ember.data.Repository.NudgeNote) {
+                            DayChip(entry.text)
+                            return@itemsIndexed
+                        }
+                        val message = entry as Message
+                        val index = reversedIndex[message.id] ?: 0
                         // Neighbours in time: older is index+1, newer is index-1 (the list is reversed).
                         val older = reversed.getOrNull(index + 1)
                         val newer = reversed.getOrNull(index - 1)
@@ -440,7 +478,7 @@ fun ChatScreen(nav: NavHostController, roomId: String, embedded: Boolean = false
                                 onForward = { forwardingAll = listOf(message) },
                                 onOpenFile = { a -> scope.launch { openFile(context, a) { notice = it } } },
                                 onJumpTo = { id ->
-                                    val target = reversed.indexOfFirst { it.id == id }
+                                    val target = timeline.indexOfFirst { it is Message && it.id == id }
                                     if (target >= 0) scope.launch { listState.animateScrollToItem(target); highlight = id; delay(1200); highlight = null }
                                 },
                                 onReact = { emoji -> scope.launch { runCatching { reactWith(message, emoji) } } },

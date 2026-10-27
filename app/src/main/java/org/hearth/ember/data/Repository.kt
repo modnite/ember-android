@@ -62,6 +62,19 @@ class Repository(
     /** Someone nudged a chat (room id, who): the open chat shakes. */
     val nudges: kotlinx.coroutines.flow.SharedFlow<Pair<String, String>> = _nudges
 
+    /** A line in a chat saying someone nudged ("B sent a nudge"), like the web client's. Kept while the app lives; a nudge is never a message. */
+    class NudgeNote(val id: String, val text: String, val at: Long)
+
+    private val _nudgeNotes = MutableStateFlow<Map<String, List<NudgeNote>>>(emptyMap())
+    val nudgeNotes: StateFlow<Map<String, List<NudgeNote>>> = _nudgeNotes.asStateFlow()
+
+    fun noteNudge(room: String, userId: String) {
+        val mine = userId == _me.value?.id
+        val name = if (mine) "You" else users.value[userId]?.displayName ?: "Someone"
+        val note = NudgeNote("nudge-" + System.nanoTime(), if (mine) "You sent a nudge" else "$name sent a nudge", System.currentTimeMillis())
+        _nudgeNotes.update { all -> all + (room to (listOf(note) + (all[room] ?: emptyList())).take(40)) }
+    }
+
     private val _loaded = MutableStateFlow(false)
     /** True once the first list of chats has arrived (so the UI can tell "loading" from "empty"). */
     val loaded: StateFlow<Boolean> = _loaded.asStateFlow()
@@ -420,7 +433,7 @@ class Repository(
             "nudge" -> {
                 val room = frame.str("roomId") ?: return
                 val from = frame.str("userId") ?: return
-                if (from != myId) _nudges.tryEmit(room to from)
+                if (from != myId) { noteNudge(room, from); _nudges.tryEmit(room to from) }
             }
             "contacts.changed" -> refreshPeople()
             "call.active" -> callOf(frame)?.let { call ->
