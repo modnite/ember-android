@@ -92,6 +92,19 @@ class CallController(private val app: EmberApp) {
     val pipMode = MutableStateFlow(false)
     /** Width over height of the picture the floating window will show, so the window takes that shape instead of cropping it. */
     val pipRatio = MutableStateFlow(9f / 16f)
+    private val frameRatios = java.util.concurrent.ConcurrentHashMap<String, Float>()
+    @Volatile private var pipIdentity: String? = null
+
+    /** The real shape of someone's picture as it arrives, which is what the floating window has to match (the published size can say landscape for a portrait phone). */
+    fun noteFrame(identity: String, ratio: Float) {
+        frameRatios[identity] = ratio
+        if (identity == pipIdentity) setPipRatio(ratio)
+    }
+
+    private fun setPipRatio(raw: Float) {
+        val ratio = raw.coerceIn(0.42f, 2.3f)
+        if (Math.abs(ratio - pipRatio.value) > 0.04f) pipRatio.value = ratio
+    }
 
     var room: Room? = null
         private set
@@ -460,11 +473,11 @@ class CallController(private val app: EmberApp) {
         // The floating window shows the speaker's (or first) camera: take that picture's shape.
         val shown = r.remoteParticipants.values.firstOrNull { it.isSpeaking && it.getTrackPublication(Track.Source.CAMERA)?.track != null }
             ?: r.remoteParticipants.values.firstOrNull { it.getTrackPublication(Track.Source.CAMERA)?.track != null }
+        pipIdentity = shown?.identity?.value
         val dim = shown?.getTrackPublication(Track.Source.CAMERA)?.dimensions
-        if (dim != null && dim.width > 0 && dim.height > 0) {
-            val ratio = (dim.width.toFloat() / dim.height).coerceIn(0.42f, 2.3f)
-            if (Math.abs(ratio - pipRatio.value) > 0.04f) pipRatio.value = ratio
-        }
+        val seen = pipIdentity?.let { frameRatios[it] }
+        if (seen != null) setPipRatio(seen)
+        else if (dim != null && dim.width > 0 && dim.height > 0) setPipRatio(dim.width.toFloat() / dim.height)
         val sharing = r.localParticipant.getTrackPublication(Track.Source.SCREEN_SHARE) != null
         if (!sharing && projectionWanted && !sharingStarting) { projectionWanted = false; CallService.start(app) } // the system's own stop chip ended it
         val changed = sharing != _state.value.screenOn

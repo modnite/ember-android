@@ -67,6 +67,7 @@ private sealed interface Results {
 @Composable
 fun MediaPicker(
     kind: MediaKind, onSendFavourite: (File) -> Unit, onSendOnline: (OnlineItem) -> Unit, onSendBytes: (ByteArray, String, String) -> Unit, onOpenSettings: () -> Unit,
+    availableHeight: androidx.compose.ui.unit.Dp? = null,
 ) {
     val context = LocalContext.current
     val app = context.ember
@@ -108,10 +109,10 @@ fun MediaPicker(
     }
 
     // The grid takes what the screen can spare, so the sheet still fits sideways.
-    val gridMax = (LocalConfiguration.current.screenHeightDp * 0.42f).dp.coerceIn(150.dp, 360.dp)
+    val gridMax = availableHeight?.let { (it - 150.dp).coerceAtLeast(70.dp) } ?: (LocalConfiguration.current.screenHeightDp * 0.42f).dp.coerceIn(150.dp, 360.dp)
     val tile = if (LocalConfiguration.current.screenHeightDp < 500) 76.dp else 92.dp
 
-    Column(Modifier.fillMaxWidth().heightIn(min = gridMax + 150.dp)) {
+    Column(Modifier.fillMaxWidth().then(if (availableHeight == null) Modifier.heightIn(min = gridMax + 150.dp) else Modifier)) {
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(selected = selected == "saved", onClick = { selected = "saved" }, label = { Text("Saved") })
             for (s in sources) FilterChip(selected = selected == s.id, onClick = { selected = s.id }, label = { Text(s.label) })

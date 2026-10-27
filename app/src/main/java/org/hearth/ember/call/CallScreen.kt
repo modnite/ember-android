@@ -37,6 +37,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.Cameraswitch
+import androidx.compose.material.icons.filled.FitScreen
+import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.Headset
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Mic
@@ -131,6 +133,10 @@ fun callRoutes(builder: NavGraphBuilder, nav: NavHostController) {
 @Composable
 fun CallScreen(nav: NavHostController, roomId: String, video: Boolean, answer: Boolean) {
     val context = LocalContext.current
+    // A keyboard left open in the chat the call started from would sit over the answer and hang-up buttons.
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    val focus = androidx.compose.ui.platform.LocalFocusManager.current
+    LaunchedEffect(Unit) { focus.clearFocus(); keyboard?.hide() }
     val app = context.ember
     val controller = app.callController ?: CallController(app).also { app.callController = it }
     val state by controller.state.collectAsState()
@@ -174,22 +180,37 @@ fun CallScreen(nav: NavHostController, roomId: String, video: Boolean, answer: B
 
 // ----------------------------------------------------------------------------------------------- video
 
-/** One LiveKit video track drawn into a view. Re-binds when the track changes. */
+/** Whether the call controls are showing: the picture's own buttons follow them. */
+val LocalCallControls = androidx.compose.runtime.compositionLocalOf { true }
+
+/**
+ * One LiveKit video track drawn into a view. Re-binds when the track changes. [onRatio] hears the real shape of the picture (width over height,
+ * after any turn the sender's phone applied), which is what decides whether it fits a tile or a floating window.
+ */
 @Composable
-fun VideoView(room: Room?, track: VideoTrack?, modifier: Modifier = Modifier, mirror: Boolean = false, fill: Boolean = true) {
+fun VideoView(room: Room?, track: VideoTrack?, modifier: Modifier = Modifier, mirror: Boolean = false, fill: Boolean = true, onRatio: ((Float) -> Unit)? = null) {
     if (room == null) return
     val renderer = remember { arrayOfNulls<TextureViewRenderer>(1) }
+    val ratioCallback by androidx.compose.runtime.rememberUpdatedState(onRatio)
     AndroidView(
         modifier = modifier,
         factory = { ctx ->
-            TextureViewRenderer(ctx).also {
+            object : TextureViewRenderer(ctx) {
+                override fun onFrameResolutionChanged(videoWidth: Int, videoHeight: Int, rotation: Int) {
+                    super.onFrameResolutionChanged(videoWidth, videoHeight, rotation)
+                    val turned = rotation % 180 != 0
+                    val w = if (turned) videoHeight else videoWidth
+                    val h = if (turned) videoWidth else videoHeight
+                    if (w > 0 && h > 0) post { ratioCallback?.invoke(w.toFloat() / h) }
+                }
+            }.also {
                 room.initVideoRenderer(it)
                 renderer[0] = it
             }
         },
         update = {
             it.setMirror(mirror)
-            // Both orientations: a landscape screen in a portrait window must still be fitted, not zoomed to fill.
+            // Fill crops the picture to the window; fit shows all of it with bars. A landscape picture in a portrait window is best fitted.
             val type = if (fill) RendererCommon.ScalingType.SCALE_ASPECT_FILL else RendererCommon.ScalingType.SCALE_ASPECT_FIT
             it.setScalingType(type, type)
         },
@@ -331,6 +352,7 @@ private fun InCall(controller: CallController, state: CallState, pip: Boolean, o
         if (controls && others.any { it.camOn }) { delay(4500); controls = false }
     }
 
+    androidx.compose.runtime.CompositionLocalProvider(LocalCallControls provides controls) {
     Box(Modifier.fillMaxSize().clickable(indication = null, interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }) { controls = !controls }) {
         when {
             pip -> PipContent(controller, state, others, me)
@@ -405,6 +427,7 @@ private fun InCall(controller: CallController, state: CallState, pip: Boolean, o
         }
     }
 
+    }
     if (outputSheet) ModalBottomSheet(onDismissRequest = { outputSheet = false }) {
         Text("Sound output", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp), fontWeight = FontWeight.SemiBold)
         for (o in state.outputs) {
@@ -535,21 +558,48 @@ private fun Grid(controller: CallController, people: List<CallPerson>, landscape
     }
 }
 
-/** A person: their video if they have it on, else their picture and name. Speaking people get an orange edge. */
+/**
+ * A person: their video if they have it on, else their picture and name. Speaking people get an orange edge. A picture whose shape does not
+ * match its tile (a landscape camera in a portrait window, or the reverse) is fitted whole by itself, so nobody is cut off; the corner button
+ * (or a tap on the picture) switches between fitting it and filling the tile.
+ */
 @Composable
-private fun PersonTile(controller: CallController, p: CallPerson, modifier: Modifier, big: Boolean, ring: Boolean = false) {
+private fun PersonTile(controller: CallController, p: CallPerson, modifier: Modifier, big: Boolean, ring: Boolean = false, forceFit: Boolean = false) {
     val app = LocalContext.current.ember
     val user = app.repo.users.collectAsState().value[p.userId]
     val speaking = p.speaking && p.micOn
+    var ratio by remember(p.identity) { mutableStateOf(0f) }
+    var userFit by remember(p.identity) { mutableStateOf<Boolean?>(null) }
+    var tile by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+    val tileRatio = if (tile.height > 0) tile.width.toFloat() / tile.height else 1f
+    val autoFit = ratio > 0f && (ratio > 1f) != (tileRatio > 1f)
+    val fit = forceFit || (userFit ?: autoFit)
     Box(
-        modifier.background(Color(0xFF241C18)).then(if (ring && speaking) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(16.dp)) else Modifier),
+        modifier.background(Color(0xFF241C18)).onSizeChanged { tile = it }
+            .then(if (ring && speaking) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(16.dp)) else Modifier),
         contentAlignment = Alignment.Center,
     ) {
         val track = p.camera
         if (p.camOn && track != null) {
-            key(track) { VideoView(controller.room, track, Modifier.fillMaxSize(), mirror = p.isLocal && controller.state.value.lens?.front == true) }
+            key(track) {
+                VideoView(
+                    controller.room, track, Modifier.fillMaxSize(),
+                    mirror = p.isLocal && controller.state.value.lens?.front == true, fill = !fit,
+                    onRatio = { ratio = it; if (!p.isLocal) controller.noteFrame(p.identity, it) },
+                )
+            }
         } else {
             Avatar(p.name, user?.avatar, user?.let { parseColor(it.avatarColor) } ?: Color.Gray, if (big) 120.dp else 56.dp)
+        }
+        // The fit/fill button comes and goes with the call controls (a tap on the picture shows or hides both).
+        if (!forceFit && p.camOn && track != null && ratio > 0f && !p.isLocal) androidx.compose.animation.AnimatedVisibility(
+            LocalCallControls.current, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.align(Alignment.TopEnd),
+        ) {
+            Box(
+                Modifier.padding(if (big) 14.dp else 6.dp).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top)).padding(top = if (big) 56.dp else 0.dp)
+                    .size(if (big) 40.dp else 30.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.45f)).clickable { userFit = !fit },
+                contentAlignment = Alignment.Center,
+            ) { Icon(if (fit) Icons.Filled.Fullscreen else Icons.Filled.FitScreen, if (fit) "Fill the window" else "Fit the whole picture", tint = Color.White, modifier = Modifier.size(if (big) 22.dp else 16.dp)) }
         }
         // Flipping the camera lives on your own picture, as in Element Call, so the control bar stays uncrowded.
         val st = controller.state.collectAsState().value
@@ -577,7 +627,7 @@ private fun PersonTile(controller: CallController, p: CallPerson, modifier: Modi
 @Composable
 private fun PipContent(controller: CallController, state: CallState, others: List<CallPerson>, me: CallPerson?) {
     val speaker = others.firstOrNull { it.speaking } ?: others.firstOrNull { it.camOn } ?: others.firstOrNull() ?: me
-    if (speaker != null) PersonTile(controller, speaker, Modifier.fillMaxSize(), big = false)
+    if (speaker != null) PersonTile(controller, speaker, Modifier.fillMaxSize(), big = false, forceFit = true)
 }
 
 /** The strip across the top of every other screen while a call is going: who, how long, tap to go back to it. */

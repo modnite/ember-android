@@ -22,6 +22,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -160,6 +164,15 @@ fun ChatScreen(nav: NavHostController, roomId: String, embedded: Boolean = false
     var actionAnchor by remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
     var emojiFor by remember { mutableStateOf<Message?>(null) }
     var emojiForDraft by remember { mutableStateOf(false) }
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    val fieldFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    // The drawer is as tall as the keyboard was, so switching between them does not move the message box.
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val imeBottom = androidx.compose.foundation.layout.WindowInsets.ime.getBottom(density)
+    var keyboardDp by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(300f) }
+    LaunchedEffect(imeBottom) { val dp = with(density) { imeBottom.toDp().value }; if (dp > 150f) keyboardDp = dp }
+    androidx.activity.compose.BackHandler(enabled = emojiForDraft) { emojiForDraft = false }
     var viewer by remember { mutableStateOf<Attachment?>(null) }
     var forwarding by remember { mutableStateOf<Message?>(null) }
     var highlight by remember { mutableStateOf<String?>(null) }
@@ -472,11 +485,16 @@ fun ChatScreen(nav: NavHostController, roomId: String, embedded: Boolean = false
             EncryptionGate(e2eeStatus) { create -> scope.launch { runCatching { app.e2ee.init(createIfMissing = create) } } }
         } else if (recording) {
             RecordingBar(recorder, onCancel = { recorder.cancel(); recording = false }, onSend = { sendRecording() })
-        } else {
+        } else Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Composer(
                 text = draft, onText = { draft = it }, enterSends = enterSends, sending = sending,
                 onSend = { send() },
-                onEmoji = { emojiForDraft = true }, onNudge = sendNudge, onCamera = { capture(it) },
+                onEmoji = {
+                    if (emojiForDraft) { emojiForDraft = false; fieldFocus.requestFocus(); keyboard?.show() }
+                    else { focusManager.clearFocus(); keyboard?.hide(); emojiForDraft = true }
+                },
+                onNudge = sendNudge, onCamera = { capture(it) },
+                fieldFocus = fieldFocus, onFieldFocused = { emojiForDraft = false }, bottomInset = !emojiForDraft, panelOpen = emojiForDraft,
                 onRecord = {
                     if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) startRecording()
                     else micPermission.launch(android.Manifest.permission.RECORD_AUDIO)
@@ -485,15 +503,14 @@ fun ChatScreen(nav: NavHostController, roomId: String, embedded: Boolean = false
                 onPhoto = { attachMenu = false; pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) },
                 onFile = { attachMenu = false; pickFile.launch(arrayOf("*/*")) },
             )
+            if (emojiForDraft) EmojiPanel(
+                height = minOf(keyboardDp, androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp * 0.5f).dp,
+                onSticker = { f -> sendFavourite(f, "image/webp") }, onGif = { f -> sendFavourite(f, "image/gif") },
+                onOnline = { item, kind -> sendOnline(item, kind) }, onBytes = { bytes, name, mime -> sendReady(bytes, name, mime) },
+                onSettings = { emojiForDraft = false; nav.navigate("settings/online") },
+            ) { e -> draft += e }
         }
     }
-
-    if (emojiForDraft) EmojiSheet(
-        onDismiss = { emojiForDraft = false },
-        onSticker = { f -> sendFavourite(f, "image/webp") }, onGif = { f -> sendFavourite(f, "image/gif") },
-        onOnline = { item, kind -> sendOnline(item, kind) }, onBytes = { bytes, name, mime -> sendReady(bytes, name, mime) },
-        onSettings = { emojiForDraft = false; nav.navigate("settings/online") },
-    ) { e -> draft += e }
     outgoing?.let { list ->
         MediaPreview(
             list, onCancel = { outgoing = null },
@@ -582,17 +599,20 @@ private fun EncryptedNotice() {
 private fun Composer(
     text: String, onText: (String) -> Unit, enterSends: Boolean, sending: Boolean, onSend: () -> Unit, onEmoji: () -> Unit, onNudge: () -> Unit, onRecord: () -> Unit,
     attachMenu: Boolean, onAttachMenu: (Boolean) -> Unit, onPhoto: () -> Unit, onFile: () -> Unit, onCamera: (video: Boolean) -> Unit,
+    fieldFocus: androidx.compose.ui.focus.FocusRequester, onFieldFocused: () -> Unit, bottomInset: Boolean, panelOpen: Boolean,
 ) {
     var cameraMenu by remember { mutableStateOf(false) }
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    Row(Modifier.widthIn(max = 880.dp).fillMaxWidth().navigationBarsPadding().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.Bottom) {
+    Row(Modifier.widthIn(max = 880.dp).fillMaxWidth().then(if (bottomInset) Modifier.navigationBarsPadding() else Modifier).padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.Bottom) {
         Surface(shape = RoundedCornerShape(26.dp), color = MaterialTheme.colorScheme.surface, shadowElevation = 1.dp, modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.Bottom) {
                 // Emoji, stickers and GIFs live behind the face at the left, as in the messengers you know.
-                IconButton(onClick = onEmoji, modifier = Modifier.size(44.dp)) { Icon(Icons.Filled.EmojiEmotions, "Emoji, stickers and GIFs", tint = muted) }
+                IconButton(onClick = onEmoji, modifier = Modifier.size(44.dp)) {
+                    Icon(if (panelOpen) Icons.Filled.Keyboard else Icons.Filled.EmojiEmotions, if (panelOpen) "Keyboard" else "Emoji, stickers and GIFs", tint = muted)
+                }
                 TextField(
                     value = text, onValueChange = onText, placeholder = { Text("Message") },
-                    modifier = Modifier.weight(1f).heightIn(max = 160.dp).onPreviewKeyEvent { e ->
+                    modifier = Modifier.weight(1f).heightIn(max = 160.dp).focusRequester(fieldFocus).onFocusChanged { if (it.isFocused) onFieldFocused() }.onPreviewKeyEvent { e ->
                         // A physical keyboard: Enter sends, Shift+Enter makes a new line (the on-screen keyboard keeps its own Enter).
                         if (e.type == KeyEventType.KeyDown && (e.key == Key.Enter || e.key == Key.NumPadEnter) && !e.isShiftPressed) {
                             onSend(); true
@@ -748,8 +768,36 @@ private val AllEmoji: List<EmojiItem> by lazy {
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun EmojiSheet(
-    onDismiss: () -> Unit, onSticker: ((File) -> Unit)? = null, onGif: ((File) -> Unit)? = null,
+private fun EmojiSheet(onDismiss: () -> Unit, onPick: (String) -> Unit) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        EmojiBody(null, onPick = onPick)
+    }
+}
+
+/**
+ * The drawer under the message box, where the keyboard was: the box stays in view above it, and tapping the box brings the keyboard back (the
+ * face button switches the same way). It is as tall as the keyboard was, so nothing jumps.
+ */
+@Composable
+private fun EmojiPanel(
+    height: androidx.compose.ui.unit.Dp, onSticker: (File) -> Unit, onGif: (File) -> Unit, onOnline: (org.hearth.ember.data.OnlineItem, MediaKind) -> Unit,
+    onBytes: (ByteArray, String, String) -> Unit, onSettings: () -> Unit, onPick: (String) -> Unit,
+) {
+    Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth().widthIn(max = 880.dp)) {
+        Column(Modifier.navigationBarsPadding()) {
+            EmojiBody(height, onSticker, onGif, onOnline, onBytes, onSettings, onPick)
+        }
+    }
+}
+
+/**
+ * Emoji, stickers and GIFs. Emoji: tabs by kind and a search by name, a tap uses one (typed into the message, or as a reaction). Stickers and
+ * GIFs (only when sending a message, not when reacting) are the ones you keep, or search online; a tap sends one. With a [height] it is a
+ * panel of exactly that height (the grids scroll inside it); without, a sheet's worth.
+ */
+@Composable
+private fun EmojiBody(
+    height: androidx.compose.ui.unit.Dp?, onSticker: ((File) -> Unit)? = null, onGif: ((File) -> Unit)? = null,
     onOnline: ((org.hearth.ember.data.OnlineItem, MediaKind) -> Unit)? = null, onBytes: (ByteArray, String, String) -> Unit = { _, _, _ -> },
     onSettings: () -> Unit = {}, onPick: (String) -> Unit,
 ) {
@@ -760,12 +808,14 @@ private fun EmojiSheet(
         val q = query.trim().lowercase()
         if (q.isNotEmpty()) AllEmoji.filter { it.name.contains(q) } else AllEmoji.filter { it.category == tab }
     }
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-        if (onSticker != null && onGif != null) androidx.compose.material3.TabRow(selectedTabIndex = section, containerColor = Color.Transparent) {
+    Column(Modifier.fillMaxWidth().then(if (height != null) Modifier.height(height) else Modifier)) {
+        val sections = onSticker != null && onGif != null
+        if (sections) androidx.compose.material3.TabRow(selectedTabIndex = section, containerColor = Color.Transparent) {
             listOf("Emoji", "Stickers", "GIFs").forEachIndexed { i, name -> androidx.compose.material3.Tab(selected = section == i, onClick = { section = i }, text = { Text(name) }) }
         }
-        if (section == 1 && onSticker != null) { MediaPicker(MediaKind.Sticker, onSticker, { onOnline?.invoke(it, MediaKind.Sticker) }, onBytes, onSettings); return@ModalBottomSheet }
-        if (section == 2 && onGif != null) { MediaPicker(MediaKind.Gif, onGif, { onOnline?.invoke(it, MediaKind.Gif) }, onBytes, onSettings); return@ModalBottomSheet }
+        val room = height?.let { it - 48.dp }
+        if (sections && section == 1) { MediaPicker(MediaKind.Sticker, onSticker!!, { onOnline?.invoke(it, MediaKind.Sticker) }, onBytes, onSettings, room); return@Column }
+        if (sections && section == 2) { MediaPicker(MediaKind.Gif, onGif!!, { onOnline?.invoke(it, MediaKind.Gif) }, onBytes, onSettings, room); return@Column }
         OutlinedTextField(
             value = query, onValueChange = { query = it }, singleLine = true, placeholder = { Text("Search emoji (heart, cat, pizza…)") },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
@@ -775,7 +825,7 @@ private fun EmojiSheet(
         }
         androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
             columns = androidx.compose.foundation.lazy.grid.GridCells.Adaptive(48.dp),
-            modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp).padding(horizontal = 12.dp),
+            modifier = Modifier.fillMaxWidth().then(if (height != null) Modifier.weight(1f) else Modifier.heightIn(max = 420.dp)).padding(horizontal = 12.dp),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp, top = 8.dp),
         ) {
             items(list.size) { i -> Text(list[i].glyph, fontSize = 28.sp, modifier = Modifier.clip(CircleShape).clickable { onPick(list[i].glyph) }.padding(8.dp)) }

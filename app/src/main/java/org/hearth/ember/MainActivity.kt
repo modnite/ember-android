@@ -65,6 +65,12 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             kotlinx.coroutines.flow.combine(app.callController!!.state.map { it.phase to it.micOn }.distinctUntilChanged(), app.callController!!.pipRatio) { a, b -> a to b }.collect { refreshPip() }
         }
+        // The screen stays on for as long as a call is going: it must not dim or sleep under someone who is talking.
+        lifecycleScope.launch {
+            app.callController!!.state.map { it.phase == org.hearth.ember.call.Phase.Connected || it.phase == org.hearth.ember.call.Phase.Connecting }.distinctUntilChanged().collect { live ->
+                if (live) window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) else window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            }
+        }
         setContent {
             val mode by app.prefs.theme.collectAsState()
             val dynamic by app.prefs.dynamicColor.collectAsState()
