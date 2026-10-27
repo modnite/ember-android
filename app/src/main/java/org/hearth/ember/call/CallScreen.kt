@@ -195,15 +195,7 @@ fun VideoView(room: Room?, track: VideoTrack?, modifier: Modifier = Modifier, mi
     AndroidView(
         modifier = modifier,
         factory = { ctx ->
-            object : TextureViewRenderer(ctx) {
-                override fun onFrameResolutionChanged(videoWidth: Int, videoHeight: Int, rotation: Int) {
-                    super.onFrameResolutionChanged(videoWidth, videoHeight, rotation)
-                    val turned = rotation % 180 != 0
-                    val w = if (turned) videoHeight else videoWidth
-                    val h = if (turned) videoWidth else videoHeight
-                    if (w > 0 && h > 0) post { ratioCallback?.invoke(w.toFloat() / h) }
-                }
-            }.also {
+            TextureViewRenderer(ctx).also {
                 room.initVideoRenderer(it)
                 renderer[0] = it
             }
@@ -218,7 +210,23 @@ fun VideoView(room: Room?, track: VideoTrack?, modifier: Modifier = Modifier, mi
     DisposableEffect(track, room) {
         val view = renderer[0]
         if (view != null && track != null) track.addRenderer(view)
-        onDispose { if (view != null && track != null) runCatching { track.removeRenderer(view) } }
+        // A second listener on the same track, only to learn the picture's real shape: the renderer itself reports nothing unless it is
+        // given an events object when it is set up, and the room sets it up without one.
+        val main = android.os.Handler(android.os.Looper.getMainLooper())
+        var last = 0f
+        val shape = livekit.org.webrtc.VideoSink { frame ->
+            val w = frame.rotatedWidth
+            val h = frame.rotatedHeight
+            if (w > 0 && h > 0) {
+                val r = w.toFloat() / h
+                if (Math.abs(r - last) > 0.01f) { last = r; main.post { ratioCallback?.invoke(r) } }
+            }
+        }
+        if (track != null) track.addRenderer(shape)
+        onDispose {
+            if (view != null && track != null) runCatching { track.removeRenderer(view) }
+            if (track != null) runCatching { track.removeRenderer(shape) }
+        }
     }
 }
 
@@ -585,7 +593,7 @@ private fun PersonTile(controller: CallController, p: CallPerson, modifier: Modi
                 VideoView(
                     controller.room, track, Modifier.fillMaxSize(),
                     mirror = p.isLocal && controller.state.value.lens?.front == true, fill = !fit,
-                    onRatio = { ratio = it; if (!p.isLocal) controller.noteFrame(p.identity, it) },
+                    onRatio = { ratio = it; android.util.Log.i("Call", "picture of ${p.name} is ${"%.2f".format(it)} wide over high"); if (!p.isLocal) controller.noteFrame(p.identity, it) },
                 )
             }
         } else {
