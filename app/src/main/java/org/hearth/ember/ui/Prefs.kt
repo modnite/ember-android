@@ -92,6 +92,11 @@ class Prefs(context: Context) {
     val soundsOn: StateFlow<Boolean> = _sounds.asStateFlow()
     fun setSoundsOn(on: Boolean) { p.edit().putBoolean("sounds", on).apply(); _sounds.value = on }
 
+    /** A small floating nudge button over the chat (the nudge is also in the paperclip menu). */
+    private val _nudgeButton = MutableStateFlow(p.getBoolean("nudgeButton", true))
+    val nudgeButton: StateFlow<Boolean> = _nudgeButton.asStateFlow()
+    fun setNudgeButton(on: Boolean) { p.edit().putBoolean("nudgeButton", on).apply(); _nudgeButton.value = on }
+
     /**
      * Echo cancelling in calls. Off (the default): WebRTC's own software canceller, which copes with speakerphone on most phones. On: the phone's
      * built-in one, which some phones do badly (the other person hears themselves). Read when a call starts.

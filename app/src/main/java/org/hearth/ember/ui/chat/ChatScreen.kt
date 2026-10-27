@@ -226,7 +226,7 @@ fun ChatScreen(nav: NavHostController, roomId: String, embedded: Boolean = false
     val reversedIndex = remember(reversed) { reversed.withIndex().associate { it.value.id to it.index } }
     val pickedMessages = remember(messages, picked) { picked.mapNotNull { id -> messages.firstOrNull { it.id == id } } }
     val atBottom by remember { derivedStateOf { listState.firstVisibleItemIndex <= 1 } }
-    LaunchedEffect(timeline.firstOrNull().let { (it as? Message)?.id ?: (it as? org.hearth.ember.data.Repository.NudgeNote)?.id }) { if (atBottom) listState.animateScrollToItem(0) }
+    LaunchedEffect(timeline.firstOrNull().let { (it as? Message)?.id ?: (it as? org.hearth.ember.data.NudgeNote)?.id }) { if (atBottom) listState.animateScrollToItem(0) }
     LaunchedEffect(listState, reversed.size) {
         androidx.compose.runtime.snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }.collect { last ->
             if (reversed.isNotEmpty() && last >= reversed.size - 4) app.repo.loadOlder(roomId)
@@ -448,8 +448,8 @@ fun ChatScreen(nav: NavHostController, roomId: String, embedded: Boolean = false
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { androidx.compose.material3.CircularProgressIndicator() }
             } else {
                 LazyColumn(state = listState, reverseLayout = true, modifier = Modifier.fillMaxHeight().widthIn(max = 880.dp).fillMaxWidth(), contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp)) {
-                    itemsIndexed(timeline, key = { _, e -> if (e is Message) e.id else (e as org.hearth.ember.data.Repository.NudgeNote).id }) { _, entry ->
-                        if (entry is org.hearth.ember.data.Repository.NudgeNote) {
+                    itemsIndexed(timeline, key = { _, e -> if (e is Message) e.id else (e as org.hearth.ember.data.NudgeNote).id }) { _, entry ->
+                        if (entry is org.hearth.ember.data.NudgeNote) {
                             DayChip(entry.text)
                             return@itemsIndexed
                         }
@@ -487,6 +487,11 @@ fun ChatScreen(nav: NavHostController, roomId: String, embedded: Boolean = false
                     }
                     if (room.encrypted) item { EncryptedNotice() }
                 }
+                val showNudgeButton by app.prefs.nudgeButton.collectAsState()
+                if (showNudgeButton) SmallFloatingActionButton(
+                    onClick = sendNudge, modifier = Modifier.align(Alignment.BottomStart).padding(12.dp),
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f), contentColor = MaterialTheme.colorScheme.primary,
+                ) { Icon(Icons.Filled.WavingHand, "Nudge") }
                 androidx.compose.animation.AnimatedVisibility(visible = !atBottom, modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp)) {
                     SmallFloatingActionButton(onClick = { scope.launch { listState.animateScrollToItem(0) } }, containerColor = MaterialTheme.colorScheme.surface) {
                         Icon(Icons.Filled.KeyboardArrowDown, "Latest")

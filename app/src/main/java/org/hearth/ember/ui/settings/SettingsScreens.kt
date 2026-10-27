@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.WavingHand
 import androidx.compose.material.icons.filled.Hearing
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material3.AlertDialog
@@ -290,6 +291,8 @@ private fun ChatsPage() {
     val soundsOn by app.prefs.soundsOn.collectAsState()
             ToggleRow(Icons.Filled.Keyboard, "Enter sends", "Use the Enter key to send instead of adding a new line", enterSends) { app.prefs.setEnterSends(it) }
     ToggleRow(Icons.Filled.Notifications, "Chat sounds", "Small sounds in a chat for messages arriving, sending and typing", soundsOn) { on -> app.prefs.setSoundsOn(on) }
+    val nudgeButton by app.prefs.nudgeButton.collectAsState()
+    ToggleRow(Icons.Filled.WavingHand, "Nudge button", "A floating button in every chat to nudge with one tap. A nudge is always in the paperclip menu too.", nudgeButton) { on -> app.prefs.setNudgeButton(on) }
 }
 
 @Composable
