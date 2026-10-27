@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.imePadding
@@ -204,7 +205,7 @@ fun MediaPreview(uris: List<Uri>, onSend: (caption: String) -> Unit, onCancel: (
             }.getOrNull()
         }
     }
-    Dialog(onDismissRequest = onCancel, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+    FullScreenDialog(onCancel) {
         Column(Modifier.fillMaxSize().background(Color.Black).imePadding()) {
             Row(Modifier.fillMaxWidth().statusBarsPadding().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onCancel) { Icon(Icons.Filled.Close, "Cancel", tint = Color.White) }
@@ -244,7 +245,7 @@ fun MediaPreview(uris: List<Uri>, onSend: (caption: String) -> Unit, onCancel: (
  */
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-fun FavouritesGrid(sticker: Boolean, onSend: (java.io.File) -> Unit) {
+fun FavouritesGrid(sticker: Boolean, onSend: (java.io.File) -> Unit, gridMax: androidx.compose.ui.unit.Dp = 340.dp) {
     val context = LocalContext.current
     val app = context.ember
     val store = if (sticker) app.stickers else app.gifs
@@ -267,7 +268,7 @@ fun FavouritesGrid(sticker: Boolean, onSend: (java.io.File) -> Unit) {
         )
         androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
             columns = androidx.compose.foundation.lazy.grid.GridCells.Adaptive(92.dp),
-            modifier = Modifier.fillMaxWidth().height(340.dp).padding(horizontal = 12.dp),
+            modifier = Modifier.fillMaxWidth().heightIn(max = gridMax).padding(horizontal = 12.dp),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp, top = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {

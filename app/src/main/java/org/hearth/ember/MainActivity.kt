@@ -75,9 +75,13 @@ class MainActivity : ComponentActivity() {
                 ThemeMode.Dark, ThemeMode.Black -> true
             }
             EmberTheme(dark = dark, dynamic = dynamic, accent = accent, black = mode == ThemeMode.Black) {
-                androidx.compose.material3.Surface(color = androidx.compose.material3.MaterialTheme.colorScheme.background) {
-                    val signedIn by app.repo.signedIn.collectAsState()
-                    if (!signedIn) LoginScreen() else EmberRoot(pendingRoom, pendingAnswer)
+                val overlays = remember { org.hearth.ember.ui.chat.OverlayHost() }
+                androidx.compose.runtime.CompositionLocalProvider(org.hearth.ember.ui.chat.LocalOverlayHost provides overlays) {
+                    androidx.compose.material3.Surface(color = androidx.compose.material3.MaterialTheme.colorScheme.background) {
+                        val signedIn by app.repo.signedIn.collectAsState()
+                        if (!signedIn) LoginScreen() else EmberRoot(pendingRoom, pendingAnswer)
+                    }
+                    org.hearth.ember.ui.chat.OverlayLayers(overlays)
                 }
             }
         }

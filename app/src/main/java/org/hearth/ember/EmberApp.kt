@@ -40,6 +40,7 @@ class EmberApp : Application(), ImageLoaderFactory {
     val ringer by lazy { org.hearth.ember.notify.HeadsetRinger(this) }
     val stickers by lazy { org.hearth.ember.data.Favourites(this, org.hearth.ember.data.Favourites.Kind.Sticker) }
     val gifs by lazy { org.hearth.ember.data.Favourites(this, org.hearth.ember.data.Favourites.Kind.Gif) }
+    val online by lazy { org.hearth.ember.data.OnlineMedia(this, client) }
     val sounds by lazy { org.hearth.ember.notify.SoundPlayer(this) }
     val updater by lazy { org.hearth.ember.data.Updater(this, client, BuildConfig.UPDATE_REPO, BuildConfig.VERSION_NAME) }
     val backup by lazy { org.hearth.ember.data.BackupService(this, this) }

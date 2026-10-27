@@ -41,8 +41,8 @@ fun UpdateRow() {
     var status by remember { mutableStateOf<String?>(null) }
     var show by remember { mutableStateOf(false) }
 
-    val subtitle = status ?: available?.let { "Version ${it.version} is available. Tap to update." } ?: "A messenger for your own Hearth server. Tap to check for updates."
-    ActionRow(if (available != null) Icons.Filled.SystemUpdate else Icons.Filled.Info, "Ember ${BuildConfig.VERSION_NAME}", subtitle) {
+    val subtitle = status ?: available?.let { "Version ${it.version} is available. Tap to update." } ?: "You have Ember ${BuildConfig.VERSION_NAME}. Tap to look for a newer one."
+    ActionRow(if (available != null) Icons.Filled.SystemUpdate else Icons.Filled.Info, if (available != null) "Update available" else "Check for updates", subtitle) {
         if (available != null) show = true
         else scope.launch {
             status = "Checking…"

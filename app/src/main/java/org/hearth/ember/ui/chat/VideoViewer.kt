@@ -8,6 +8,9 @@ import android.view.ViewGroup
 import androidx.annotation.OptIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -119,7 +122,7 @@ fun VideoViewer(attachment: Attachment, roomId: String, onClose: () -> Unit) {
         onDispose { }
     }
     DisposableEffect(Unit) { onDispose { player.release() } }
-    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+    FullScreenDialog(onClose) {
         Box(Modifier.fillMaxSize().background(Color.Black)) {
             AndroidView(
                 factory = { ctx ->
@@ -130,10 +133,10 @@ fun VideoViewer(attachment: Attachment, roomId: String, onClose: () -> Unit) {
                         setKeepScreenOn(true)
                     }
                 },
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing),
             )
             if (source == null) CircularProgressIndicator(Modifier.align(Alignment.Center), color = Color.White)
-            IconButton(onClick = onClose, modifier = Modifier.align(Alignment.TopStart).statusBarsPadding().padding(8.dp)) {
+            IconButton(onClick = onClose, modifier = Modifier.align(Alignment.TopStart).windowInsetsPadding(WindowInsets.safeDrawing).padding(8.dp)) {
                 Icon(Icons.Filled.Close, "Close", tint = Color.White)
             }
             if (source == null && attachment.encrypted != 0) Text("Opening the encrypted video…", color = Color.White.copy(alpha = 0.7f), modifier = Modifier.align(Alignment.BottomCenter).padding(32.dp))

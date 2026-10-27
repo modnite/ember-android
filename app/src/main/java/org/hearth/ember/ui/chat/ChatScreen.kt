@@ -106,6 +106,7 @@ import kotlinx.coroutines.launch
 import org.hearth.ember.data.Attachment
 import org.hearth.ember.data.Message
 import org.hearth.ember.ember
+import org.hearth.ember.data.MediaKind
 import org.hearth.ember.ui.components.RoomAvatar
 import org.hearth.ember.ui.dayLabel
 import org.hearth.ember.ui.sameDay
@@ -251,6 +252,17 @@ fun ChatScreen(nav: NavHostController, roomId: String, embedded: Boolean = false
             runCatching { app.repo.sendBytes(roomId, file.readBytes(), file.name, mime) }
                 .onSuccess { app.sounds.play(org.hearth.ember.notify.SoundPlayer.Kind.Out) }
                 .onFailure { notice = it.message }
+            sending = false
+        }
+    }
+    fun sendOnline(item: org.hearth.ember.data.OnlineItem, kind: MediaKind) {
+        emojiForDraft = false
+        scope.launch {
+            sending = true
+            runCatching {
+                val (bytes, name, mime) = app.online.fetchForSending(item, kind)
+                app.repo.sendBytes(roomId, bytes, name, mime)
+            }.onSuccess { app.sounds.play(org.hearth.ember.notify.SoundPlayer.Kind.Out) }.onFailure { notice = it.message }
             sending = false
         }
     }
@@ -470,6 +482,8 @@ fun ChatScreen(nav: NavHostController, roomId: String, embedded: Boolean = false
     if (emojiForDraft) EmojiSheet(
         onDismiss = { emojiForDraft = false },
         onSticker = { f -> sendFavourite(f, "image/webp") }, onGif = { f -> sendFavourite(f, "image/gif") },
+        onOnline = { item, kind -> sendOnline(item, kind) },
+        onSettings = { emojiForDraft = false; nav.navigate("settings/online") },
     ) { e -> draft += e }
     outgoing?.let { list ->
         MediaPreview(
@@ -725,7 +739,10 @@ private val AllEmoji: List<EmojiItem> by lazy {
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun EmojiSheet(onDismiss: () -> Unit, onSticker: ((File) -> Unit)? = null, onGif: ((File) -> Unit)? = null, onPick: (String) -> Unit) {
+private fun EmojiSheet(
+    onDismiss: () -> Unit, onSticker: ((File) -> Unit)? = null, onGif: ((File) -> Unit)? = null,
+    onOnline: ((org.hearth.ember.data.OnlineItem, MediaKind) -> Unit)? = null, onSettings: () -> Unit = {}, onPick: (String) -> Unit,
+) {
     var query by remember { mutableStateOf("") }
     var tab by remember { mutableStateOf(0) }
     var section by remember { mutableStateOf(0) }
@@ -737,8 +754,8 @@ private fun EmojiSheet(onDismiss: () -> Unit, onSticker: ((File) -> Unit)? = nul
         if (onSticker != null && onGif != null) androidx.compose.material3.TabRow(selectedTabIndex = section, containerColor = Color.Transparent) {
             listOf("Emoji", "Stickers", "GIFs").forEachIndexed { i, name -> androidx.compose.material3.Tab(selected = section == i, onClick = { section = i }, text = { Text(name) }) }
         }
-        if (section == 1 && onSticker != null) { FavouritesGrid(sticker = true, onSend = onSticker); return@ModalBottomSheet }
-        if (section == 2 && onGif != null) { FavouritesGrid(sticker = false, onSend = onGif); return@ModalBottomSheet }
+        if (section == 1 && onSticker != null) { MediaPicker(MediaKind.Sticker, onSticker, { onOnline?.invoke(it, MediaKind.Sticker) }, onSettings); return@ModalBottomSheet }
+        if (section == 2 && onGif != null) { MediaPicker(MediaKind.Gif, onGif, { onOnline?.invoke(it, MediaKind.Gif) }, onSettings); return@ModalBottomSheet }
         OutlinedTextField(
             value = query, onValueChange = { query = it }, singleLine = true, placeholder = { Text("Search emoji (heart, cat, pizza…)") },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),

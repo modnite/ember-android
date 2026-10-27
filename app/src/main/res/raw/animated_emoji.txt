@@ -1,0 +1,548 @@
+203c	double exclamation mark
+2049	exclamation question mark
+231b	hourglass
+23f0	alarm clock
+23f3	hourglass with flowing sand
+2601	cloud
+2602	umbrella
+2603	snowman
+2604	comet
+2615	hot beverage
+261d	white up pointing index
+2622_fe0f	radioactive sign
+262e	peace symbol
+262f	yin yang
+2639	white frowning face
+263a_fe0f	white smiling face
+2648	aries
+2649	taurus
+264a	gemini
+264b	cancer
+264c	leo
+264d	virgo
+264e	libra
+264f	scorpius
+2650	sagittarius
+2651	capricorn
+2652	aquarius
+2653	pisces
+265f	black chess pawn
+2660_fe0f	black spade suit
+2665	black heart suit
+2668	hot springs
+267e	permanent paper sign
+2693	anchor
+2696	scales
+2699	gear
+26a0	warning sign
+26a1	high voltage sign
+26bd	soccer ball
+26be	baseball
+26c4	snowman without snow
+26c5	sun behind cloud
+26ce	ophiuchus
+26d3	chains
+26f3	flag in hole
+26f5	sailboat
+26f8	ice skate
+26fd	fuel pump
+2702	black scissors
+2705	white heavy check mark
+2708	airplane
+270a	raised fist
+270b	raised hand
+270c	victory hand
+270d	writing hand
+270f	pencil
+2728	sparkles
+274c	cross mark
+2753	black question mark ornament
+2757	heavy exclamation mark symbol
+2763_fe0f	heavy heart exclamation mark ornament
+2764_fe0f	heavy black heart
+2795	heavy plus sign
+2b50	white medium star
+1f300	cyclone
+1f304	sunrise over mountains
+1f305	sunrise
+1f307	sunset over buildings
+1f308	rainbow
+1f30a	water wave
+1f30b	volcano
+1f30c	milky way
+1f30d	earth globe europe-africa
+1f30e	earth globe americas
+1f30f	earth globe asia-australia
+1f31a	new moon with face
+1f31b	first quarter moon with face
+1f31c	last quarter moon with face
+1f31d	full moon with face
+1f31e	sun with face
+1f31f	glowing star
+1f321	thermometer
+1f327	cloud with rain
+1f329	cloud with lightning
+1f32a	cloud with tornado
+1f32c	wind blowing face
+1f32d	hot dog
+1f32e	taco
+1f32f	burrito
+1f331	seedling
+1f332	evergreen tree
+1f335	cactus
+1f337	tulip
+1f338	cherry blossom
+1f339	rose
+1f33c	blossom
+1f33d	ear of maize
+1f33f	herb
+1f340	four leaf clover
+1f341	maple leaf
+1f342	fallen leaf
+1f343	leaf fluttering in wind
+1f344	mushroom
+1f345	tomato
+1f347	grapes
+1f348	melon
+1f349	watermelon
+1f34a	tangerine
+1f34b	lemon
+1f34d	pineapple
+1f34e	red apple
+1f350	pear
+1f352	cherries
+1f353	strawberry
+1f354	hamburger
+1f355	slice of pizza
+1f357	poultry leg
+1f35c	steaming bowl
+1f35d	spaghetti
+1f35e	bread
+1f361	dango
+1f362	oden
+1f366	soft ice cream
+1f368	ice cream
+1f369	doughnut
+1f36a	cookie
+1f373	cooking
+1f375	teacup without handle
+1f377	wine glass
+1f379	tropical drink
+1f37b	clinking beer mugs
+1f37c	baby bottle
+1f37d	fork and knife with plate
+1f37e	bottle with popping cork
+1f37f	popcorn
+1f381	wrapped present
+1f382	birthday cake
+1f383	jack-o-lantern
+1f386	fireworks
+1f388	balloon
+1f389	party popper
+1f38a	confetti ball
+1f393	graduation cap
+1f39e	film frames
+1f39f	admission tickets
+1f3a0	carousel horse
+1f3a1	ferris wheel
+1f3a2	roller coaster
+1f3a3	fishing pole and fish
+1f3ac	clapper board
+1f3ad	performing arts
+1f3af	direct hit
+1f3b0	slot machine
+1f3b1	billiards
+1f3b2	game die
+1f3b3	bowling
+1f3b6	multiple musical notes
+1f3b7	saxophone
+1f3b8	guitar
+1f3ba	trumpet
+1f3bb	violin
+1f3be	tennis racquet and ball
+1f3bf	ski and ski boot
+1f3c0	basketball and hoop
+1f3c1	chequered flag
+1f3c6	trophy
+1f3c9	rugby football
+1f3cd	racing motorcycle
+1f3ce	racing car
+1f3cf	cricket bat and ball
+1f3d1	field hockey stick and ball
+1f3d2	ice hockey stick and puck
+1f3d5	camping
+1f3da	derelict house building
+1f3de	national park
+1f3e0	house building
+1f3f3	waving white flag
+1f3f4	waving black flag
+1f3f8	badminton racquet and shuttlecock
+1f400	rat
+1f402	ox
+1f405	tiger
+1f407	rabbit
+1f409	dragon
+1f40a	crocodile
+1f40c	snail
+1f40d	snake
+1f412	monkey
+1f413	rooster
+1f415	dog
+1f416	pig
+1f419	octopus
+1f41b	bug
+1f41c	ant
+1f41d	honeybee
+1f41e	lady beetle
+1f41f	fish
+1f421	blowfish
+1f422	turtle
+1f423	hatching chick
+1f424	baby chick
+1f425	front-facing baby chick
+1f429	poodle
+1f42c	dolphin
+1f42e	cow face
+1f431	cat face
+1f433	spouting whale
+1f438	frog face
+1f43a	wolf face
+1f43b	bear face
+1f43c	panda face
+1f43e	paw prints
+1f43f	chipmunk
+1f440	eyes
+1f441	eye
+1f442	ear
+1f443	nose
+1f446	white up pointing backhand index
+1f447	white down pointing backhand index
+1f448	white left pointing backhand index
+1f449	white right pointing backhand index
+1f44b	waving hand sign
+1f44c	ok hand sign
+1f44d	thumbs up sign
+1f44e	thumbs down sign
+1f44f	clapping hands sign
+1f450	open hands sign
+1f451	crown
+1f45f	athletic shoe
+1f460	high-heeled shoe
+1f463	footprints
+1f479	japanese ogre
+1f47b	ghost
+1f47d	extraterrestrial alien
+1f47e	alien monster
+1f47f	imp
+1f480	skull
+1f483	dancer
+1f485	nail polish
+1f48b	kiss mark
+1f48c	love letter
+1f48d	ring
+1f48e	gem stone
+1f490	bouquet
+1f493	beating heart
+1f494	broken heart
+1f496	sparkling heart
+1f497	growing heart
+1f498	heart with arrow
+1f499	blue heart
+1f49a	green heart
+1f49b	yellow heart
+1f49e	revolving hearts
+1f49f	heart decoration
+1f4a1	electric light bulb
+1f4a3	bomb
+1f4a5	collision symbol
+1f4a7	droplet
+1f4a9	pile of poo
+1f4aa	flexed biceps
+1f4ac	speech balloon
+1f4af	hundred points symbol
+1f4b8	money with wings
+1f4bb	personal computer
+1f4bf	optical disc
+1f4c8	chart with upwards trend
+1f4c9	chart with downwards trend
+1f4ca	bar chart
+1f4da	books
+1f4df	pager
+1f4e3	cheering megaphone
+1f4e6	package
+1f4f4	mobile phone off
+1f4f7	camera
+1f4f8	camera with flash
+1f4fa	television
+1f50b	battery
+1f50c	electric plug
+1f50e	right-pointing magnifying glass
+1f512	lock
+1f514	bell
+1f525	fire
+1f52e	crystal ball
+1f54a	dove of peace
+1f573	hole
+1f577	spider
+1f587	linked paperclips
+1f590	raised hand with fingers splayed
+1f595	reversed hand with middle finger extended
+1f596	raised hand with part between middle and ring fingers
+1f5a4	black heart
+1f5a8	printer
+1f5d1	wastebasket
+1f5e3	speaking head in silhouette
+1f5ef	right anger bubble
+1f5f3	ballot box with ballot
+1f5ff	moyai
+1f600	grinning face
+1f601	grinning face with smiling eyes
+1f602	face with tears of joy
+1f603	smiling face with open mouth
+1f605	smiling face with open mouth and cold sweat
+1f606	smiling face with open mouth and tightly-closed eyes
+1f607	smiling face with halo
+1f608	smiling face with horns
+1f609	winking face
+1f60a	smiling face with smiling eyes
+1f60b	face savouring delicious food
+1f60c	relieved face
+1f60d	smiling face with heart-shaped eyes
+1f60e	smiling face with sunglasses
+1f60f	smirking face
+1f610	neutral face
+1f611	expressionless face
+1f612	unamused face
+1f614	pensive face
+1f615	confused face
+1f616	confounded face
+1f617	kissing face
+1f618	face throwing a kiss
+1f619	kissing face with smiling eyes
+1f61a	kissing face with closed eyes
+1f61b	face with stuck-out tongue
+1f61c	face with stuck-out tongue and winking eye
+1f61e	disappointed face
+1f61f	worried face
+1f620	angry face
+1f621	pouting face
+1f622	crying face
+1f623	persevering face
+1f624	face with look of triumph
+1f625	disappointed but relieved face
+1f626	frowning face with open mouth
+1f627	anguished face
+1f628	fearful face
+1f629	weary face
+1f62a	sleepy face
+1f62b	tired face
+1f62c	grimacing face
+1f62d	loudly crying face
+1f62e	face with open mouth
+1f62f	hushed face
+1f630	face with open mouth and cold sweat
+1f631	face screaming in fear
+1f632	astonished face
+1f633	flushed face
+1f634	sleeping face
+1f635	dizzy face
+1f636	face without mouth
+1f637	face with medical mask
+1f638	grinning cat face with smiling eyes
+1f639	cat face with tears of joy
+1f63a	smiling cat face with open mouth
+1f63b	smiling cat face with heart-shaped eyes
+1f63c	cat face with wry smile
+1f63d	kissing cat face with closed eyes
+1f63e	pouting cat face
+1f63f	crying cat face
+1f640	weary cat face
+1f641	slightly frowning face
+1f642	slightly smiling face
+1f643	upside-down face
+1f644	face with rolling eyes
+1f648	see-no-evil monkey
+1f649	hear-no-evil monkey
+1f64a	speak-no-evil monkey
+1f64c	person raising both hands in celebration
+1f64f	person with folded hands
+1f680	rocket
+1f682	steam locomotive
+1f68c	bus
+1f695	taxi
+1f697	automobile
+1f69a	delivery truck
+1f69c	tractor
+1f6a7	construction sign
+1f6a8	police cars revolving light
+1f6a9	triangular flag on post
+1f6ae	put litter in its place symbol
+1f6b2	bicycle
+1f6ce	bellhop bell
+1f6d1	octagonal sign
+1f6d2	shopping trolley
+1f6df	ring buoy
+1f6e0	hammer and wrench
+1f6eb	airplane departure
+1f6ec	airplane arriving
+1f6f6	canoe
+1f6f8	flying saucer
+1f6f9	skateboard
+1f6fc	roller skate
+1f90c	pinched fingers
+1f90d	white heart
+1f90e	brown heart
+1f90f	pinching hand
+1f911	money-mouth face
+1f912	face with thermometer
+1f913	nerd face
+1f914	thinking face
+1f915	face with head-bandage
+1f916	robot face
+1f917	hugging face
+1f918	sign of the horns
+1f919	call me hand
+1f91a	raised back of hand
+1f91b	left-facing fist
+1f91c	right-facing fist
+1f91d	handshake
+1f91e	hand with index and middle fingers crossed
+1f91f	i love you hand sign
+1f920	face with cowboy hat
+1f921	clown face
+1f922	nauseated face
+1f923	rolling on the floor laughing
+1f924	drooling face
+1f925	lying face
+1f927	sneezing face
+1f928	face with one eyebrow raised
+1f929	grinning face with star eyes
+1f92a	grinning face with one large and one small eye
+1f92b	face with finger covering closed lips
+1f92c	serious face with symbols covering mouth
+1f92d	smiling face with smiling eyes and hand covering mouth
+1f92e	face with open mouth vomiting
+1f92f	shocked face with exploding head
+1f932	palms up together
+1f933	selfie
+1f941	drum with drumsticks
+1f947	first place medal
+1f949	third place medal
+1f94b	martial arts uniform
+1f94d	lacrosse stick and ball
+1f94e	softball
+1f94f	flying disc
+1f951	avocado
+1f952	cucumber
+1f955	carrot
+1f957	green salad
+1f95d	kiwifruit
+1f95e	pancakes
+1f962	chopsticks
+1f967	pie
+1f968	pretzel
+1f96c	leafy green
+1f96d	mango
+1f970	smiling face with smiling eyes and three hearts
+1f971	yawning face
+1f972	smiling face with tear
+1f973	face with party horn and party hat
+1f974	face with uneven eyes and wavy mouth
+1f976	freezing face
+1f978	disguised face
+1f979	face holding back tears
+1f97a	face with pleading eyes
+1f980	crab
+1f981	lion face
+1f982	scorpion
+1f984	unicorn face
+1f985	eagle
+1f987	bat
+1f988	shark
+1f989	owl
+1f98a	fox face
+1f98b	butterfly
+1f98d	gorilla
+1f98e	lizard
+1f994	hedgehog
+1f995	sauropod
+1f996	t-rex
+1f997	cricket
+1f998	kangaroo
+1f99a	peacock
+1f99d	raccoon
+1f99e	lobster
+1f99f	mosquito
+1f9a0	microbe
+1f9a6	otter
+1f9a7	orangutan
+1f9a9	flamingo
+1f9ad	seal
+1f9ae	guide dog
+1f9b4	bone
+1f9b5	leg
+1f9b6	foot
+1f9bb	ear with hearing aid
+1f9bf	mechanical leg
+1f9c0	cheese wedge
+1f9c3	beverage box
+1f9c4	garlic
+1f9c5	onion
+1f9cb	bubble tea
+1f9d0	face with monocle
+1f9e0	brain
+1f9e1	orange heart
+1f9e6	socks
+1f9f9	broom
+1fa70	ballet shoes
+1fa76	grey heart
+1fa77	pink heart
+1fa78	drop of blood
+1fa7a	stethoscope
+1fa81	kite
+1fa82	parachute
+1fa83	boomerang
+1fa84	magic wand
+1fa85	pinata
+1fa90	ringed planet
+1fa94	diya lamp
+1fa95	banjo
+1fa99	coin
+1faa4	mouse trap
+1faa8	rock
+1faa9	mirror ball
+1faab	low battery
+1faad	folding hand fan
+1fab0	fly
+1fab1	worm
+1fab3	cockroach
+1fab7	lotus
+1fabb	hyacinth
+1fabc	jellyfish
+1fabf	goose
+1fac0	anatomical heart
+1fac2	people hugging
+1facf	donkey
+1fad0	blueberries
+1fad1	bell pepper
+1fad6	teapot
+1fad7	pouring liquid
+1fad8	beans
+1fada	ginger root
+1fae0	melting face
+1fae1	saluting face
+1fae2	face with open eyes and hand over mouth
+1fae3	face with peeking eye
+1fae4	face with diagonal mouth
+1fae5	dotted line face
+1fae6	biting lip
+1fae7	bubbles
+1fae8	shaking face
+1faf0	hand with index finger and thumb crossed
+1faf1	rightwards hand
+1faf2	leftwards hand
+1faf3	palm down hand
+1faf4	palm up hand
+1faf6	heart hands
+1faf7	leftwards pushing hand
+1faf8	rightwards pushing hand

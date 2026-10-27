@@ -3,6 +3,9 @@ package org.hearth.ember.ui.chat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -41,7 +44,7 @@ fun ImageViewer(attachment: Attachment, onClose: () -> Unit) {
     }
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
-    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+    FullScreenDialog(onClose) {
         Box(Modifier.fillMaxSize().background(Color.Black)) {
             AsyncImage(
                 model = request, contentDescription = attachment.filename, contentScale = ContentScale.Fit,
@@ -54,7 +57,7 @@ fun ImageViewer(attachment: Attachment, onClose: () -> Unit) {
                     }
                     .graphicsLayer(scaleX = scale, scaleY = scale, translationX = offset.x, translationY = offset.y),
             )
-            IconButton(onClick = onClose, modifier = Modifier.align(Alignment.TopStart).statusBarsPadding().padding(8.dp)) {
+            IconButton(onClick = onClose, modifier = Modifier.align(Alignment.TopStart).windowInsetsPadding(WindowInsets.safeDrawing).padding(8.dp)) {
                 Icon(Icons.Filled.Close, "Close", tint = Color.White)
             }
         }

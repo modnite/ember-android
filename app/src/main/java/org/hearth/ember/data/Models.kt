@@ -34,7 +34,7 @@ data class Attachment(
     val isVideo get() = mime.startsWith("video/")
 
     /** A sticker is an ordinary picture whose file name says so (sticker-….webp), so every other client simply shows it as a picture. */
-    val isSticker get() = filename.startsWith("sticker-") && (filename.endsWith(".webp") || filename.endsWith(".png"))
+    val isSticker get() = filename.startsWith("sticker-") && (filename.endsWith(".webp") || filename.endsWith(".png") || filename.endsWith(".gif"))
 }
 
 @Serializable

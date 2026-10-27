@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Visibility
@@ -107,7 +108,9 @@ fun SettingsTab(nav: NavHostController) {
             ActionRow(Icons.Filled.DarkMode, "Appearance", "Theme and colours") { nav.navigate("settings/appearance") }
             ActionRow(Icons.Filled.Keyboard, "Chats", "Enter key, chat sounds") { nav.navigate("settings/chats") }
             ActionRow(Icons.Filled.Lock, "Encryption", "The key that opens encrypted chats") { nav.navigate("settings/encryption") }
+            ActionRow(Icons.Filled.Search, "GIFs and stickers", "Search Giphy, Imgur and more") { nav.navigate("settings/online") }
             ActionRow(Icons.Filled.Backup, "Backup and restore", "Back up and restore your key and settings") { nav.navigate("settings/backup") }
+            UpdateRow()
 
             HorizontalDivider(Modifier.padding(vertical = 4.dp))
             Text(
@@ -116,7 +119,6 @@ fun SettingsTab(nav: NavHostController) {
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             ActionRow(Icons.AutoMirrored.Filled.Logout, "Sign out", "Remove this phone from your account", danger = true) { signOutDialog = true }
-            UpdateRow()
             Spacer(Modifier.height(32.dp))
         }
     }
@@ -148,6 +150,7 @@ fun SettingsPage(nav: NavHostController, page: String) {
         "chats" -> "Chats"
         "encryption" -> "Encryption"
         "backup" -> "Backup and restore"
+        "online" -> "GIFs and stickers"
         else -> "Settings"
     }
     Column(Modifier.fillMaxSize()) {
@@ -164,6 +167,7 @@ fun SettingsPage(nav: NavHostController, page: String) {
                 "chats" -> ChatsPage()
                 "encryption" -> EncryptionPage()
                 "backup" -> BackupRows()
+                "online" -> OnlineRows()
             }
             Spacer(Modifier.height(32.dp))
         }
