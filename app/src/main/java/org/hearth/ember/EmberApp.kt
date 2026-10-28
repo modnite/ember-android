@@ -70,6 +70,21 @@ class EmberApp : Application(), ImageLoaderFactory {
         notifier.createChannels()
         scope.launch(kotlinx.coroutines.Dispatchers.Default) { org.hearth.ember.data.BackupScheduler.apply(this@EmberApp, backup.settings) }
         scope.launch { repo.ring.collect { if (it != null) ringer.start() else ringer.stop() } }
+        // A nudge reaches you wherever you are in the app, not only in the chat it came from: the phone buzzes and plays the sound (louder, and on the
+        // loudspeaker, during a call: someone whose phone is put down in the house can then be found). In the open chat itself the chat does it.
+        scope.launch {
+            repo.nudges.collect { (room, _) ->
+                if (repo.viewingRoom == room && repo.appVisible) return@collect
+                val inCall = callController?.state?.value?.phase.let { it == org.hearth.ember.call.Phase.Connected || it == org.hearth.ember.call.Phase.Connecting }
+                runCatching {
+                    val vibrator = getSystemService(android.content.Context.VIBRATOR_SERVICE) as? android.os.Vibrator
+                    val pattern = if (inCall) longArrayOf(0, 400, 150, 400, 150, 700) else longArrayOf(0, 90, 60, 90, 60, 160)
+                    if (android.os.Build.VERSION.SDK_INT >= 26) vibrator?.vibrate(android.os.VibrationEffect.createWaveform(pattern, -1))
+                    else @Suppress("DEPRECATION") vibrator?.vibrate(pattern, -1)
+                }
+                sounds.nudge(loud = inCall)
+            }
+        }
     }
 
     /** Pictures come from the Hearth server, which wants the session cookie: the same client serves them. */

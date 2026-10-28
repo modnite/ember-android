@@ -48,7 +48,7 @@ class SoundPlayer(private val context: Context) {
     @Volatile private var fetching = false
 
     /** Play the nudge sound (the same file the web app plays). The first time it is downloaded; until then a nudge is silent. */
-    fun nudge() {
+    fun nudge(loud: Boolean = false) {
         val app = context.ember
         if (!app.prefs.soundsOn.value) return
         if (context.getSystemService(AudioManager::class.java).ringerMode != AudioManager.RINGER_MODE_NORMAL) return
@@ -57,7 +57,8 @@ class SoundPlayer(private val context: Context) {
         runCatching {
             nudgeVoices.incrementAndGet()
             val player = android.media.MediaPlayer()
-            player.setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION_COMMUNICATION_INSTANT).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
+            // Loud: in a call the nudge is how someone finds a phone put down somewhere, so it is played as an alarm (the loudspeaker, over the call).
+            player.setAudioAttributes(AudioAttributes.Builder().setUsage(if (loud) AudioAttributes.USAGE_ALARM else AudioAttributes.USAGE_NOTIFICATION_COMMUNICATION_INSTANT).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
             player.setDataSource(nudgeFile.absolutePath)
             player.setOnCompletionListener { it.release(); nudgeVoices.decrementAndGet() }
             player.setOnErrorListener { mp, _, _ -> mp.release(); nudgeVoices.decrementAndGet(); true }

@@ -50,6 +50,8 @@ import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.VideocamOff
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.VolumeOff
+import androidx.compose.material.icons.filled.VoiceOverOff
+import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Hearing
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -365,7 +367,7 @@ private fun InCall(controller: CallController, state: CallState, pip: Boolean, o
     }
 
     androidx.compose.runtime.CompositionLocalProvider(LocalCallControls provides controls) {
-    Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures(onDoubleTap = { controller.toggleFit() }, onTap = { controls = !controls }) }) {
+    Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures(onDoubleTap = { if (sharer == null && others.size <= 1) swapped = !swapped }, onTap = { controls = !controls }) }) {
         when {
             pip -> PipContent(controller, state, others, me)
             sharer != null -> ScreenStage(controller, sharer, listOf(sharer) + others.filter { it !== sharer } + listOfNotNull(me), landscape)
@@ -400,10 +402,13 @@ private fun InCall(controller: CallController, state: CallState, pip: Boolean, o
                     "Sound output", on = out?.kind == CallOutput.Kind.Speaker, small = landscape,
                 ) { if (state.outputs.size > 2) outputSheet = true else controller.toggleSpeaker() }
                 RoundButton(if (state.camOn) Icons.Filled.Videocam else Icons.Filled.VideocamOff, if (state.camOn) "Camera off" else "Camera on", off = !state.camOn, small = landscape) { controller.toggleCamera() }
-                // Fit the whole picture of the other person, or fill the window with it (a double tap on the picture does the same).
-                if (others.any { it.camOn }) {
-                    val fitting by controller.shownFit.collectAsState()
-                    RoundButton(if (fitting) Icons.Filled.Fullscreen else Icons.Filled.FitScreen, if (fitting) "Fill the window" else "Fit the whole picture", small = landscape) { controller.toggleFit() }
+                // Mute the other person for yourself only (they are not told). In a group each person's own picture has the button instead.
+                if (others.size == 1) {
+                    val o = others[0]
+                    RoundButton(
+                        if (o.mutedByMe) Icons.Filled.VoiceOverOff else Icons.Filled.RecordVoiceOver,
+                        if (o.mutedByMe) "Hear ${o.name} again" else "Mute ${o.name} for me", on = o.mutedByMe, small = landscape,
+                    ) { controller.toggleMuteFor(o.identity) }
                 }
                 RoundButton(
                     if (state.screenOn) Icons.Filled.StopScreenShare else Icons.Filled.ScreenShare, if (state.screenOn) "Stop sharing" else "Share screen",
@@ -511,7 +516,7 @@ private fun OneToOne(controller: CallController, state: CallState, other: CallPe
     Box(Modifier.fillMaxSize()) {
         if (big != null) PersonTile(controller, big, Modifier.fillMaxSize(), big = true) else Waiting(state)
         if (small != null && other != null) {
-            // Your picture goes wherever you drop it, and stays there (also after turning the phone, and in the next call). Tap it to swap the pictures.
+            // Your picture goes wherever you drop it, and stays there (also after turning the phone, and in the next call). A double tap anywhere swaps the two pictures; a single tap on it does nothing, so a slip of the thumb next to the flip-camera button changes nothing.
             androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(8.dp)) {
                 val tileW = if (landscape) 150.dp else 104.dp
                 val tileH = if (landscape) 100.dp else 144.dp
@@ -524,7 +529,6 @@ private fun OneToOne(controller: CallController, state: CallState, other: CallPe
                         .offset { androidx.compose.ui.unit.IntOffset((pos.x * roomX).roundToInt(), (pos.y * roomY).roundToInt()) }
                         .size(tileW, tileH)
                         .clip(RoundedCornerShape(16.dp)).border(1.5.dp, Color.White.copy(alpha = 0.35f), RoundedCornerShape(16.dp))
-                        .pointerInput(Unit) { detectTapGestures { onSwap() } }
                         .pointerInput(roomX, roomY) {
                             detectDragGestures(
                                 onDrag = { change, amount ->
@@ -615,8 +619,10 @@ private fun PersonTile(controller: CallController, p: CallPerson, modifier: Modi
         // What is going on with this person's sound, always visible: muted by themselves, or muted by you for yourself (the grid labels it below).
         val showBadges = !ring && ((!p.micOn) || p.mutedByMe)
         val canMuteForMe = !p.isLocal && !forceFit
-        val buttonShown = canMuteForMe && (!big || LocalCallControls.current)
-        if (showBadges || (buttonShown && big)) Row(
+        val buttonShown = canMuteForMe && !big
+        // On the big picture the corner button fits the whole picture or fills the window with it.
+        val fitShown = big && !forceFit && p.camOn && p.camera != null && ratio > 0f && LocalCallControls.current
+        if (showBadges || fitShown) Row(
             Modifier.align(Alignment.TopStart).then(
                 if (big) Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top.plus(WindowInsetsSides.Start))).padding(start = 12.dp, top = 64.dp)
                 else Modifier.padding(6.dp),
@@ -631,10 +637,10 @@ private fun PersonTile(controller: CallController, p: CallPerson, modifier: Modi
                 Icon(Icons.Filled.VolumeOff, null, tint = Color(0xFFFFCC80), modifier = Modifier.size(if (big) 16.dp else 12.dp))
                 if (big) Text(" You muted them", color = Color.White, style = MaterialTheme.typography.labelMedium)
             }
-            if (buttonShown && big) Box(
-                Modifier.size(36.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.55f)).clickable { controller.toggleMuteFor(p.identity) },
+            if (fitShown) Box(
+                Modifier.size(36.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.55f)).clickable { controller.toggleFit() },
                 contentAlignment = Alignment.Center,
-            ) { Icon(if (p.mutedByMe) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp, if (p.mutedByMe) "Hear ${p.name} again" else "Mute ${p.name} for me", tint = Color.White, modifier = Modifier.size(20.dp)) }
+            ) { Icon(if (fit) Icons.Filled.Fullscreen else Icons.Filled.FitScreen, if (fit) "Fill the window" else "Fit the whole picture", tint = Color.White, modifier = Modifier.size(20.dp)) }
         }
         if (buttonShown && !big) Box(
             Modifier.align(Alignment.TopEnd).padding(6.dp).size(30.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.55f)).clickable { controller.toggleMuteFor(p.identity) },

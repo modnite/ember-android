@@ -97,7 +97,7 @@ class CallController(private val app: EmberApp) {
     private val viewPrefs = app.getSharedPreferences("ember_call", Context.MODE_PRIVATE)
 
     /** Where your own small picture sits, as a fraction of the room it has to move in (0,0 top left to 1,1 bottom right): free, and kept across turning the phone and across calls. */
-    val selfPos = MutableStateFlow(androidx.compose.ui.geometry.Offset(viewPrefs.getFloat("selfX", 1f), viewPrefs.getFloat("selfY", 0.06f)))
+    val selfPos = MutableStateFlow(androidx.compose.ui.geometry.Offset(viewPrefs.getFloat("selfX", 0.86f), viewPrefs.getFloat("selfY", 0.06f)))
     /** Where the little picture of the other person sits over the rest of the app while a call goes on, as a fraction of the room it can move in. */
     val miniPos = MutableStateFlow(androidx.compose.ui.geometry.Offset(viewPrefs.getFloat("miniX", 1f), viewPrefs.getFloat("miniY", 0.12f)))
     fun saveMiniPos() { viewPrefs.edit().putFloat("miniX", miniPos.value.x).putFloat("miniY", miniPos.value.y).apply() }
@@ -153,7 +153,8 @@ class CallController(private val app: EmberApp) {
         if (_state.value.phase != Phase.Idle) hangup()
         val room0 = app.repo.room(roomId)
         this.video = video
-        wantSpeaker = video
+        // The speaker or the earpiece you last chose is where the next call starts; with nothing chosen yet, a video call starts on the speaker.
+        wantSpeaker = if (viewPrefs.contains("speaker")) viewPrefs.getBoolean("speaker", false) else video
         val lenses = Lenses.list(app)
         _state.value = CallState(
             phase = Phase.Lobby, roomId = roomId, title = room0?.title(app.repo.me.value?.id ?: "") ?: "Call", video = video,
@@ -308,6 +309,7 @@ class CallController(private val app: EmberApp) {
     fun selectOutput(output: CallOutput) {
         val device = audio.availableAudioDevices.firstOrNull { it.name == output.id } ?: return
         wantSpeaker = output.kind == CallOutput.Kind.Speaker
+        viewPrefs.edit().putBoolean("speaker", wantSpeaker).apply()
         telecomRoute(device)
         audio.selectDevice(device)
         refreshOutputs()
@@ -320,7 +322,7 @@ class CallController(private val app: EmberApp) {
             ?: audio.availableAudioDevices.firstOrNull { it is AudioDevice.Earpiece }
         val now = audio.selectedAudioDevice
         val target = if (now is AudioDevice.Speakerphone) quiet else speaker
-        if (target != null) { wantSpeaker = target is AudioDevice.Speakerphone; telecomRoute(target); audio.selectDevice(target) }
+        if (target != null) { wantSpeaker = target is AudioDevice.Speakerphone; viewPrefs.edit().putBoolean("speaker", wantSpeaker).apply(); telecomRoute(target); audio.selectDevice(target) }
         refreshOutputs()
     }
 
@@ -405,7 +407,8 @@ class CallController(private val app: EmberApp) {
         if (!routeApplied) {
             routeApplied = true
             val target = headset ?: if (wantSpeaker) list.firstOrNull { it is AudioDevice.Speakerphone } else list.firstOrNull { it is AudioDevice.Earpiece }
-            if (target != null) audio.selectDevice(target)
+            // The system call owns the route (Samsung's above all), so the start is requested from it as well, as a tap on the button is.
+            if (target != null) { telecomRoute(target); audio.selectDevice(target) }
             refreshOutputs()
         } else if (headset != null && audio.selectedAudioDevice !== headset && !_state.value.outputs.any { it.kind == CallOutput.Kind.Speaker && it.id == audio.selectedAudioDevice?.name && wantSpeaker }) {
             // A headset appeared in the middle of the call: use it unless the person picked the speaker on purpose.
