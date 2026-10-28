@@ -43,12 +43,12 @@
             android:supportsPictureInPicture="true"
             android:resizeableActivity="true"
             android:windowSoftInputMode="adjustResize">
-            <!-- Desktop windowing (Samsung DeX, Android desktop mode, Chromebooks): a comfortable first window that can be resized freely. -->
+            <!-- Desktop windowing (Samsung DeX, Android desktop mode, Chromebooks): a comfortable first window that can be resized freely. The minimum must stay small: the floating call window (picture in picture) is never smaller than it, and 360 x 420 dp made that window as wide as the screen. -->
             <layout
                 android:defaultWidth="1100dp"
                 android:defaultHeight="720dp"
-                android:minWidth="360dp"
-                android:minHeight="420dp" />
+                android:minWidth="200dp"
+                android:minHeight="200dp" />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
