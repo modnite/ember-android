@@ -92,6 +92,17 @@ class CallController(private val app: EmberApp) {
     val pipMode = MutableStateFlow(false)
     /** Width over height of the picture the floating window will show, so the window takes that shape instead of cropping it. */
     val pipRatio = MutableStateFlow(9f / 16f)
+    private val viewPrefs = app.getSharedPreferences("ember_call", Context.MODE_PRIVATE)
+
+    /** Where your own small picture sits, as a fraction of the room it has to move in (0,0 top left to 1,1 bottom right): free, and kept across turning the phone and across calls. */
+    val selfPos = MutableStateFlow(androidx.compose.ui.geometry.Offset(viewPrefs.getFloat("selfX", 1f), viewPrefs.getFloat("selfY", 0.06f)))
+    fun saveSelfPos() { viewPrefs.edit().putFloat("selfX", selfPos.value.x).putFloat("selfY", selfPos.value.y).apply() }
+
+    /** How other people's pictures are drawn: null = by themselves (whole picture when its shape does not match the window), true = whole picture, false = filling the window. */
+    val fitMode = MutableStateFlow<Boolean?>(null)
+    /** What is on screen right now, so the button can say what a press will do. */
+    val shownFit = MutableStateFlow(false)
+    fun toggleFit() { fitMode.value = !shownFit.value }
     private val frameRatios = java.util.concurrent.ConcurrentHashMap<String, Float>()
     @Volatile private var pipIdentity: String? = null
 
@@ -163,10 +174,10 @@ class CallController(private val app: EmberApp) {
         val r = LiveKit.create(app, share, LiveKitOverrides(
             audioOptions = AudioOptions(
                 audioHandler = audio,
-                // The phone's built-in echo canceller and noise suppressor are skipped (unless chosen in Settings): when they fail, on speakerphone
-                // above all, the other person hears their own voice back. WebRTC's software ones take over.
+                // By default the phone's own echo canceller and noise suppressor do the work, as they always did. Settings can switch to WebRTC's
+                // software ones for a phone whose own does badly on speakerphone.
                 javaAudioDeviceModuleCustomizer = { b ->
-                    if (!app.prefs.deviceEcho.value) b.setUseHardwareAcousticEchoCanceler(false).setUseHardwareNoiseSuppressor(false)
+                    if (app.prefs.softwareEcho.value) b.setUseHardwareAcousticEchoCanceler(false).setUseHardwareNoiseSuppressor(false)
                 },
             ),
         ))
@@ -414,6 +425,7 @@ class CallController(private val app: EmberApp) {
     }
 
     fun hangup() {
+        fitMode.value = null
         val s = _state.value
         val wasInCall = s.phase == Phase.Connected || s.phase == Phase.Connecting
         val roomId = s.roomId

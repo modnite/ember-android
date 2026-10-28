@@ -361,7 +361,7 @@ private fun InCall(controller: CallController, state: CallState, pip: Boolean, o
     }
 
     androidx.compose.runtime.CompositionLocalProvider(LocalCallControls provides controls) {
-    Box(Modifier.fillMaxSize().clickable(indication = null, interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }) { controls = !controls }) {
+    Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures(onDoubleTap = { controller.toggleFit() }, onTap = { controls = !controls }) }) {
         when {
             pip -> PipContent(controller, state, others, me)
             sharer != null -> ScreenStage(controller, sharer, listOf(sharer) + others.filter { it !== sharer } + listOfNotNull(me), landscape)
@@ -396,6 +396,11 @@ private fun InCall(controller: CallController, state: CallState, pip: Boolean, o
                     "Sound output", on = out?.kind == CallOutput.Kind.Speaker, small = landscape,
                 ) { if (state.outputs.size > 2) outputSheet = true else controller.toggleSpeaker() }
                 RoundButton(if (state.camOn) Icons.Filled.Videocam else Icons.Filled.VideocamOff, if (state.camOn) "Camera off" else "Camera on", off = !state.camOn, small = landscape) { controller.toggleCamera() }
+                // Fit the whole picture of the other person, or fill the window with it (a double tap on the picture does the same).
+                if (others.any { it.camOn }) {
+                    val fitting by controller.shownFit.collectAsState()
+                    RoundButton(if (fitting) Icons.Filled.Fullscreen else Icons.Filled.FitScreen, if (fitting) "Fill the window" else "Fit the whole picture", small = landscape) { controller.toggleFit() }
+                }
                 RoundButton(
                     if (state.screenOn) Icons.Filled.StopScreenShare else Icons.Filled.ScreenShare, if (state.screenOn) "Stop sharing" else "Share screen",
                     on = state.screenOn, small = landscape,
@@ -499,42 +504,36 @@ private fun ScreenStage(controller: CallController, sharer: CallPerson, rest: Li
 private fun OneToOne(controller: CallController, state: CallState, other: CallPerson?, me: CallPerson?, swapped: Boolean, landscape: Boolean, onSwap: () -> Unit) {
     val big = if (swapped) me else other
     val small = if (swapped) other else me
-    // Your picture sits in a corner and can be dragged to any other: let go and it settles into the nearest one.
-    var right by remember(landscape) { mutableStateOf(!landscape) }
-    var bottom by remember(landscape) { mutableStateOf(landscape) }
-    var drag by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
-    var area by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
-    var tileCenter by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
-    Box(Modifier.fillMaxSize().onSizeChanged { area = it }) {
+    Box(Modifier.fillMaxSize()) {
         if (big != null) PersonTile(controller, big, Modifier.fillMaxSize(), big = true) else Waiting(state)
         if (small != null && other != null) {
-            val alignment = when {
-                right && bottom -> Alignment.BottomEnd
-                right -> Alignment.TopEnd
-                bottom -> Alignment.BottomStart
-                else -> Alignment.TopStart
+            // Your picture goes wherever you drop it, and stays there (also after turning the phone, and in the next call). Tap it to swap the pictures.
+            androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(8.dp)) {
+                val tileW = if (landscape) 150.dp else 104.dp
+                val tileH = if (landscape) 100.dp else 144.dp
+                val density = androidx.compose.ui.platform.LocalDensity.current
+                val roomX = with(density) { (maxWidth - tileW).toPx() }.coerceAtLeast(1f)
+                val roomY = with(density) { (maxHeight - tileH).toPx() }.coerceAtLeast(1f)
+                val pos by controller.selfPos.collectAsState()
+                Box(
+                    Modifier
+                        .offset { androidx.compose.ui.unit.IntOffset((pos.x * roomX).roundToInt(), (pos.y * roomY).roundToInt()) }
+                        .size(tileW, tileH)
+                        .clip(RoundedCornerShape(16.dp)).border(1.5.dp, Color.White.copy(alpha = 0.35f), RoundedCornerShape(16.dp))
+                        .pointerInput(Unit) { detectTapGestures { onSwap() } }
+                        .pointerInput(roomX, roomY) {
+                            detectDragGestures(
+                                onDrag = { change, amount ->
+                                    change.consume()
+                                    val p = controller.selfPos.value
+                                    controller.selfPos.value = androidx.compose.ui.geometry.Offset((p.x + amount.x / roomX).coerceIn(0f, 1f), (p.y + amount.y / roomY).coerceIn(0f, 1f))
+                                },
+                                onDragEnd = { controller.saveSelfPos() },
+                                onDragCancel = { controller.saveSelfPos() },
+                            )
+                        },
+                ) { PersonTile(controller, small, Modifier.fillMaxSize(), big = false) }
             }
-            Box(
-                Modifier.align(alignment)
-                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal.plus(WindowInsetsSides.Vertical)))
-                    .padding(top = if (!bottom) 64.dp else 0.dp, bottom = if (bottom) (if (landscape) 14.dp else 120.dp) else 0.dp, start = 12.dp, end = 12.dp)
-                    .offset { androidx.compose.ui.unit.IntOffset(drag.x.roundToInt(), drag.y.roundToInt()) }
-                    .width(if (landscape) 150.dp else 104.dp).aspectRatio(if (landscape) 1.5f else 0.72f)
-                    .clip(RoundedCornerShape(16.dp)).border(1.5.dp, Color.White.copy(alpha = 0.35f), RoundedCornerShape(16.dp))
-                    .onGloballyPositioned { c -> tileCenter = c.positionInParent() + androidx.compose.ui.geometry.Offset(c.size.width / 2f, c.size.height / 2f) }
-                    .pointerInput(Unit) { detectTapGestures { onSwap() } }
-                    .pointerInput(Unit) {
-                        detectDragGestures(
-                            onDrag = { change, amount -> change.consume(); drag += amount },
-                            onDragEnd = {
-                                right = tileCenter.x > area.width / 2f
-                                bottom = tileCenter.y > area.height / 2f
-                                drag = androidx.compose.ui.geometry.Offset.Zero
-                            },
-                            onDragCancel = { drag = androidx.compose.ui.geometry.Offset.Zero },
-                        )
-                    },
-            ) { PersonTile(controller, small, Modifier.fillMaxSize(), big = false) }
         }
     }
 }
@@ -577,11 +576,14 @@ private fun PersonTile(controller: CallController, p: CallPerson, modifier: Modi
     val user = app.repo.users.collectAsState().value[p.userId]
     val speaking = p.speaking && p.micOn
     var ratio by remember(p.identity) { mutableStateOf(0f) }
-    var userFit by remember(p.identity) { mutableStateOf<Boolean?>(null) }
+    val manualFit by controller.fitMode.collectAsState()
     var tile by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
     val tileRatio = if (tile.height > 0) tile.width.toFloat() / tile.height else 1f
     val autoFit = ratio > 0f && (ratio > 1f) != (tileRatio > 1f)
-    val fit = forceFit || (userFit ?: autoFit)
+    // Your own small picture always fills its little window; every other picture fits or fills as chosen (by itself: whole when the shapes differ).
+    val fit = forceFit || (if (p.isLocal && !big) false else (manualFit ?: autoFit))
+    // The big picture of someone else tells the call controls what is showing.
+    if (big) androidx.compose.runtime.SideEffect { controller.shownFit.value = fit }
     Box(
         modifier.background(Color(0xFF241C18)).onSizeChanged { tile = it }
             .then(if (ring && speaking) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(16.dp)) else Modifier),
@@ -589,25 +591,22 @@ private fun PersonTile(controller: CallController, p: CallPerson, modifier: Modi
     ) {
         val track = p.camera
         if (p.camOn && track != null) {
-            key(track) {
-                VideoView(
-                    controller.room, track, Modifier.fillMaxSize(),
-                    mirror = p.isLocal && controller.state.value.lens?.front == true, fill = !fit,
-                    onRatio = { ratio = it; android.util.Log.i("Call", "picture of ${p.name} is ${"%.2f".format(it)} wide over high"); if (!p.isLocal) controller.noteFrame(p.identity, it) },
-                )
+            // Fitting: the picture's view is given the picture's own shape inside the tile (bars around it), so nothing is cut off whatever the renderer does.
+            androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                val showFit = fit && ratio > 0f
+                val shape = if (showFit) {
+                    if (maxWidth.value / maxHeight.value < ratio) Modifier.fillMaxWidth().aspectRatio(ratio) else Modifier.fillMaxHeight().aspectRatio(ratio)
+                } else Modifier.fillMaxSize()
+                key(track) {
+                    VideoView(
+                        controller.room, track, shape,
+                        mirror = p.isLocal && controller.state.value.lens?.front == true, fill = !showFit,
+                        onRatio = { ratio = it; android.util.Log.i("Call", "picture of ${p.name} is ${"%.2f".format(it)} wide over high"); if (!p.isLocal) controller.noteFrame(p.identity, it) },
+                    )
+                }
             }
         } else {
             Avatar(p.name, user?.avatar, user?.let { parseColor(it.avatarColor) } ?: Color.Gray, if (big) 120.dp else 56.dp)
-        }
-        // The fit/fill button comes and goes with the call controls (a tap on the picture shows or hides both).
-        if (!forceFit && p.camOn && track != null && ratio > 0f && !p.isLocal) androidx.compose.animation.AnimatedVisibility(
-            LocalCallControls.current, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.align(Alignment.TopEnd),
-        ) {
-            Box(
-                Modifier.padding(if (big) 14.dp else 6.dp).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top)).padding(top = if (big) 56.dp else 0.dp)
-                    .size(if (big) 40.dp else 30.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.45f)).clickable { userFit = !fit },
-                contentAlignment = Alignment.Center,
-            ) { Icon(if (fit) Icons.Filled.Fullscreen else Icons.Filled.FitScreen, if (fit) "Fill the window" else "Fit the whole picture", tint = Color.White, modifier = Modifier.size(if (big) 22.dp else 16.dp)) }
         }
         // Flipping the camera lives on your own picture, as in Element Call, so the control bar stays uncrowded.
         val st = controller.state.collectAsState().value

@@ -303,13 +303,9 @@ fun ChatScreen(nav: NavHostController, roomId: String, embedded: Boolean = false
             sending = false
         }
     }
+    // A file goes through the same preview as a picture, so it can have a caption too.
     val pickFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-        if (uris.isEmpty()) return@rememberLauncherForActivityResult
-        scope.launch {
-            sending = true
-            for (uri in uris) runCatching { app.repo.sendUri(roomId, uri) }.onFailure { notice = it.message }
-            sending = false
-        }
+        if (uris.isNotEmpty()) outgoing = uris
     }
     var attachMenu by remember { mutableStateOf(false) }
 
@@ -557,12 +553,12 @@ fun ChatScreen(nav: NavHostController, roomId: String, embedded: Boolean = false
     outgoing?.let { list ->
         MediaPreview(
             list, onCancel = { outgoing = null },
-            onSend = { caption ->
+            onSend = { caption, quality ->
                 outgoing = null
                 scope.launch {
                     sending = true
                     for ((i, uri) in list.withIndex()) {
-                        runCatching { app.repo.sendUri(roomId, uri, if (i == 0) caption else "") }
+                        runCatching { app.repo.sendUri(roomId, uri, if (i == 0) caption else "", quality) }
                             .onSuccess { app.sounds.play(org.hearth.ember.notify.SoundPlayer.Kind.Out) }
                             .onFailure { notice = it.message }
                     }
@@ -645,6 +641,7 @@ private fun Composer(
     fieldFocus: androidx.compose.ui.focus.FocusRequester, onFieldFocused: () -> Unit, bottomInset: Boolean, panelOpen: Boolean,
 ) {
     var cameraMenu by remember { mutableStateOf(false) }
+    val nudgeButton by LocalContext.current.ember.prefs.nudgeButton.collectAsState()
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     Row(Modifier.widthIn(max = 880.dp).fillMaxWidth().then(if (bottomInset) Modifier.navigationBarsPadding() else Modifier).padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.Bottom) {
         Surface(shape = RoundedCornerShape(26.dp), color = MaterialTheme.colorScheme.surface, shadowElevation = 1.dp, modifier = Modifier.weight(1f)) {
@@ -674,7 +671,8 @@ private fun Composer(
                     DropdownMenu(expanded = attachMenu, onDismissRequest = { onAttachMenu(false) }) {
                         DropdownMenuItem(text = { Text("Photos and videos") }, leadingIcon = { Icon(Icons.Filled.PhotoLibrary, null) }, onClick = onPhoto)
                         DropdownMenuItem(text = { Text("File") }, leadingIcon = { Icon(Icons.Filled.AttachFile, null) }, onClick = onFile)
-                        DropdownMenuItem(text = { Text("Nudge") }, leadingIcon = { Icon(Icons.Filled.WavingHand, null) }, onClick = { onAttachMenu(false); onNudge() })
+                        // The floating nudge button does this; the menu only keeps it for when that button is switched off.
+                        if (!nudgeButton) DropdownMenuItem(text = { Text("Nudge") }, leadingIcon = { Icon(Icons.Filled.WavingHand, null) }, onClick = { onAttachMenu(false); onNudge() })
                     }
                 }
                 // Nothing typed yet: the camera sits in the field, a thumb away.

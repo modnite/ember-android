@@ -92,18 +92,23 @@ class Prefs(context: Context) {
     val soundsOn: StateFlow<Boolean> = _sounds.asStateFlow()
     fun setSoundsOn(on: Boolean) { p.edit().putBoolean("sounds", on).apply(); _sounds.value = on }
 
+    /** Whether a photo or video is sent in HD unless you pick otherwise for that one (the preview before sending has the choice). */
+    private val _sendHd = MutableStateFlow(p.getBoolean("sendHd", false))
+    val sendHd: StateFlow<Boolean> = _sendHd.asStateFlow()
+    fun setSendHd(on: Boolean) { p.edit().putBoolean("sendHd", on).apply(); _sendHd.value = on }
+
     /** A small floating nudge button over the chat (the nudge is also in the paperclip menu). */
     private val _nudgeButton = MutableStateFlow(p.getBoolean("nudgeButton", true))
     val nudgeButton: StateFlow<Boolean> = _nudgeButton.asStateFlow()
     fun setNudgeButton(on: Boolean) { p.edit().putBoolean("nudgeButton", on).apply(); _nudgeButton.value = on }
 
     /**
-     * Echo cancelling in calls. Off (the default): WebRTC's own software canceller, which copes with speakerphone on most phones. On: the phone's
-     * built-in one, which some phones do badly (the other person hears themselves). Read when a call starts.
+     * Echo cancelling in calls. Off (the default): the phone's own canceller and noise suppressor, as calls always used. On: WebRTC's software ones, which
+     * suit a phone whose own does badly on speakerphone (the other person hears themselves). Read when a call starts.
      */
-    private val _deviceEcho = MutableStateFlow(p.getBoolean("deviceEcho", false))
-    val deviceEcho: StateFlow<Boolean> = _deviceEcho.asStateFlow()
-    fun setDeviceEcho(on: Boolean) { p.edit().putBoolean("deviceEcho", on).apply(); _deviceEcho.value = on }
+    private val _softwareEcho = MutableStateFlow(p.getBoolean("softwareEcho", false))
+    val softwareEcho: StateFlow<Boolean> = _softwareEcho.asStateFlow()
+    fun setSoftwareEcho(on: Boolean) { p.edit().putBoolean("softwareEcho", on).apply(); _softwareEcho.value = on }
 
     /** The accent colour (an ARGB number), or null for Ember's own orange. */
     private val _accent = MutableStateFlow(if (p.contains("accent")) p.getInt("accent", 0) else null)

@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Palette
@@ -234,12 +235,12 @@ private fun SoundsPage() {
             ActionRow(Icons.Filled.Notifications, "Use Ember's own sounds", "Go back to the default chime and ringtone") {
                 app.prefs.setMessageSound(null); app.prefs.setCallSound(null); app.notifier.createChannels()
             }
-            val deviceEcho by app.prefs.deviceEcho.collectAsState()
+            val softwareEcho by app.prefs.softwareEcho.collectAsState()
             ToggleRow(
-                Icons.Filled.Hearing, "Phone's own echo cancelling in calls",
-                "Off: Ember cancels echo itself, which copes with speakerphone best. Turn on if others say your voice sounds wrong. From the next call.",
-                deviceEcho,
-            ) { app.prefs.setDeviceEcho(it) }
+                Icons.Filled.Hearing, "Ember's own echo cancelling in calls",
+                "Turn on if the other person hears themselves back (speakerphone on some phones). Off uses the phone's own. From the next call.",
+                softwareEcho,
+            ) { app.prefs.setSoftwareEcho(it) }
             ActionRow(Icons.Filled.Notifications, "Send a test notification", "Shows a message alert with your chosen sound") { app.notifier.test() }
             ActionRow(Icons.Filled.Notifications, "Play the ringtone", "Plays it for a few seconds") {
                 val uri = when (callSound) { null -> Uri.parse("android.resource://" + context.packageName + "/" + org.hearth.ember.R.raw.ember_ring); "silent" -> null; else -> Uri.parse(callSound) }
@@ -291,8 +292,10 @@ private fun ChatsPage() {
     val soundsOn by app.prefs.soundsOn.collectAsState()
             ToggleRow(Icons.Filled.Keyboard, "Enter sends", "Use the Enter key to send instead of adding a new line", enterSends) { app.prefs.setEnterSends(it) }
     ToggleRow(Icons.Filled.Notifications, "Chat sounds", "Small sounds in a chat for messages arriving, sending and typing", soundsOn) { on -> app.prefs.setSoundsOn(on) }
+    val sendHd by app.prefs.sendHd.collectAsState()
+    ToggleRow(Icons.Filled.PhotoLibrary, "Send photos and videos in HD", "Sharper and larger. Off sends a smaller copy that arrives faster; the preview before sending lets you choose for one send.", sendHd) { on -> app.prefs.setSendHd(on) }
     val nudgeButton by app.prefs.nudgeButton.collectAsState()
-    ToggleRow(Icons.Filled.WavingHand, "Nudge button", "A floating button in every chat to nudge with one tap. A nudge is always in the paperclip menu too.", nudgeButton) { on -> app.prefs.setNudgeButton(on) }
+    ToggleRow(Icons.Filled.WavingHand, "Nudge button", "A floating button in every chat to nudge with one tap. Off puts Nudge back in the paperclip menu.", nudgeButton) { on -> app.prefs.setNudgeButton(on) }
 }
 
 @Composable

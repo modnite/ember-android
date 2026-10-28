@@ -29,6 +29,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
@@ -192,11 +193,33 @@ fun StickerSheet(a: Attachment, roomId: String, onDismiss: () -> Unit) {
  * first one.
  */
 @Composable
-fun MediaPreview(uris: List<Uri>, onSend: (caption: String) -> Unit, onCancel: () -> Unit) {
+fun MediaPreview(uris: List<Uri>, onSend: (caption: String, quality: org.hearth.ember.data.Quality) -> Unit, onCancel: () -> Unit) {
     val context = LocalContext.current
+    val app = context.ember
     var caption by remember(uris) { mutableStateOf("") }
+    val hdByDefault by app.prefs.sendHd.collectAsState()
+    var quality by remember(uris) { mutableStateOf(if (hdByDefault) org.hearth.ember.data.Quality.HD else org.hearth.ember.data.Quality.Standard) }
     val first = uris.first()
-    val isVideo = remember(first) { context.contentResolver.getType(first)?.startsWith("video/") == true }
+    val mime = remember(first) { context.contentResolver.getType(first).orEmpty() }
+    val isVideo = mime.startsWith("video/")
+    val isPicture = mime.startsWith("image/") && mime != "image/gif"
+    val isOther = !isVideo && !mime.startsWith("image/")
+    // What is about to be sent: its name and size, so the choice below means something.
+    val info by produceState<Pair<String, Long>?>(null, first) {
+        value = withContext(Dispatchers.IO) {
+            runCatching {
+                var name = "file"
+                var size = -1L
+                context.contentResolver.query(first, null, null, null, null)?.use { c ->
+                    if (c.moveToFirst()) {
+                        c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME).takeIf { it >= 0 }?.let { name = c.getString(it) ?: name }
+                        c.getColumnIndex(android.provider.OpenableColumns.SIZE).takeIf { it >= 0 }?.let { size = c.getLong(it) }
+                    }
+                }
+                name to size
+            }.getOrNull()
+        }
+    }
     val still by produceState<Bitmap?>(null, first) {
         if (isVideo) value = withContext(Dispatchers.IO) {
             runCatching {
@@ -205,6 +228,7 @@ fun MediaPreview(uris: List<Uri>, onSend: (caption: String) -> Unit, onCancel: (
             }.getOrNull()
         }
     }
+    fun megabytes(b: Long) = if (b >= 1_048_576) "%.1f MB".format(b / 1_048_576.0) else "${maxOf(1, b / 1024)} KB"
     FullScreenDialog(onCancel) {
         Column(Modifier.fillMaxSize().background(Color.Black).imePadding()) {
             Row(Modifier.fillMaxWidth().statusBarsPadding().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -212,12 +236,34 @@ fun MediaPreview(uris: List<Uri>, onSend: (caption: String) -> Unit, onCancel: (
                 if (uris.size > 1) Text("1 of ${uris.size}", color = Color.White.copy(alpha = 0.8f), modifier = Modifier.padding(start = 8.dp))
             }
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                if (isVideo) {
-                    still?.let { androidx.compose.foundation.Image(it.asImageBitmap(), null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize()) }
-                    Box(Modifier.size(64.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.5f)), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Filled.PlayArrow, null, Modifier.size(40.dp), tint = Color.White)
+                when {
+                    isVideo -> {
+                        still?.let { androidx.compose.foundation.Image(it.asImageBitmap(), null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize()) }
+                        Box(Modifier.size(64.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.5f)), contentAlignment = Alignment.Center) {
+                            Icon(Icons.Filled.PlayArrow, null, Modifier.size(40.dp), tint = Color.White)
+                        }
                     }
-                } else AsyncImage(model = first, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+                    isOther -> Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
+                        Icon(Icons.Filled.AttachFile, null, tint = Color.White, modifier = Modifier.size(72.dp))
+                        Text(info?.first.orEmpty(), color = Color.White, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 12.dp), maxLines = 3)
+                        info?.second?.takeIf { it >= 0 }?.let { Text(megabytes(it), color = Color.White.copy(alpha = 0.7f)) }
+                    }
+                    else -> AsyncImage(model = first, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+                }
+            }
+            // Standard or HD, as in the messengers: a smaller copy that arrives fast, or one that keeps its detail. Files and GIFs go as they are.
+            if (isPicture || isVideo) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                for (q in org.hearth.ember.data.Quality.values()) {
+                    androidx.compose.material3.FilterChip(
+                        selected = quality == q, onClick = { quality = q }, label = { Text(if (q == org.hearth.ember.data.Quality.HD) "HD" else "Standard") },
+                        modifier = Modifier.padding(end = 8.dp),
+                    )
+                }
+                val size = info?.second?.takeIf { it >= 0 }
+                Text(
+                    (if (quality == org.hearth.ember.data.Quality.HD) "Sharper, larger" else "Smaller, faster") + (size?.let { " · original ${megabytes(it)}" } ?: ""),
+                    color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f),
+                )
             }
             Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.Bottom) {
                 Surface(shape = RoundedCornerShape(24.dp), color = Color(0xFF2A2A2C), modifier = Modifier.weight(1f)) {
@@ -231,7 +277,7 @@ fun MediaPreview(uris: List<Uri>, onSend: (caption: String) -> Unit, onCancel: (
                     )
                 }
                 Spacer(Modifier.width(10.dp))
-                Box(Modifier.size(52.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary).clickable { onSend(caption.trim()) }, contentAlignment = Alignment.Center) {
+                Box(Modifier.size(52.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary).clickable { onSend(caption.trim(), quality) }, contentAlignment = Alignment.Center) {
                     Icon(Icons.AutoMirrored.Filled.Send, "Send", tint = MaterialTheme.colorScheme.onPrimary)
                 }
             }

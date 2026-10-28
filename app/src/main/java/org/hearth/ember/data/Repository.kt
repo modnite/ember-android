@@ -278,7 +278,8 @@ class Repository(
         applyMessage(message, mine = true)
     }
 
-    suspend fun sendUri(roomId: String, uri: Uri, caption: String = "") {
+    /** Send a file or picture or video. With a [quality] a photo or video is brought down to it first (see [MediaCompressor]); anything else goes as it is. */
+    suspend fun sendUri(roomId: String, uri: Uri, caption: String = "", quality: Quality? = null) {
         val resolver = context.contentResolver
         var name = "file"
         resolver.query(uri, null, null, null, null)?.use { c ->
@@ -286,6 +287,8 @@ class Repository(
             if (c.moveToFirst() && i >= 0) name = c.getString(i) ?: name
         }
         val mime = resolver.getType(uri) ?: "application/octet-stream"
+        val prepared = if (quality != null) runCatching { MediaCompressor(context).prepare(uri, name, mime, quality) }.getOrNull() else null
+        if (prepared != null) { sendBytes(roomId, prepared.bytes, prepared.name, prepared.mime, caption); return }
         val bytes = resolver.openInputStream(uri)?.use { it.readBytes() } ?: throw ApiException(0, "Could not read that file.")
         sendBytes(roomId, bytes, name, mime, caption)
     }
