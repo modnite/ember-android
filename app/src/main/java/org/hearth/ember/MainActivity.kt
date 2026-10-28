@@ -240,7 +240,13 @@ private fun EmberRoot(pendingRoom: androidx.compose.runtime.MutableState<String?
         androidx.compose.foundation.layout.Box(
             androidx.compose.ui.Modifier.weight(1f).fillMaxWidth()
                 .then(if (ongoing && !pip && !onCallScreen) androidx.compose.ui.Modifier.consumeWindowInsets(androidx.compose.foundation.layout.WindowInsets.statusBars) else androidx.compose.ui.Modifier),
-        ) { EmberNav(nav) }
+        ) {
+            EmberNav(nav)
+            // The other person's picture stays on screen over the rest of the app while a call goes on.
+            if (ongoing && !pip && !onCallScreen && callState.roomId != null) org.hearth.ember.call.CallMini(app.callController!!, callState) {
+                nav.navigate("call/${callState.roomId}") { launchSingleTop = true }
+            }
+        }
     }
     // A newer Ember was found: say so once per launch and offer to install it.
     val update by app.updater.available.collectAsState()

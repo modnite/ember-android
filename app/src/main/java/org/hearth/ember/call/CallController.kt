@@ -98,6 +98,9 @@ class CallController(private val app: EmberApp) {
 
     /** Where your own small picture sits, as a fraction of the room it has to move in (0,0 top left to 1,1 bottom right): free, and kept across turning the phone and across calls. */
     val selfPos = MutableStateFlow(androidx.compose.ui.geometry.Offset(viewPrefs.getFloat("selfX", 1f), viewPrefs.getFloat("selfY", 0.06f)))
+    /** Where the little picture of the other person sits over the rest of the app while a call goes on, as a fraction of the room it can move in. */
+    val miniPos = MutableStateFlow(androidx.compose.ui.geometry.Offset(viewPrefs.getFloat("miniX", 1f), viewPrefs.getFloat("miniY", 0.12f)))
+    fun saveMiniPos() { viewPrefs.edit().putFloat("miniX", miniPos.value.x).putFloat("miniY", miniPos.value.y).apply() }
     fun saveSelfPos() { viewPrefs.edit().putFloat("selfX", selfPos.value.x).putFloat("selfY", selfPos.value.y).apply() }
 
     /** People whose sound you switched off for yourself (by identity). Only this phone's playback changes. */
@@ -114,6 +117,9 @@ class CallController(private val app: EmberApp) {
     fun toggleFit() { fitMode.value = !shownFit.value }
     private val frameRatios = java.util.concurrent.ConcurrentHashMap<String, Float>()
     @Volatile private var pipIdentity: String? = null
+
+    /** The last shape seen for someone's picture (0 when none yet), so a picture that changes places is drawn in its own shape at once. */
+    fun knownRatio(identity: String): Float = frameRatios[identity] ?: 0f
 
     /** The real shape of someone's picture as it arrives, which is what the floating window has to match (the published size can say landscape for a portrait phone). */
     fun noteFrame(identity: String, ratio: Float) {
@@ -364,6 +370,7 @@ class CallController(private val app: EmberApp) {
                 if (_state.value.camOn) publishCamera()
                 app.realtime.joinCall(roomId)
                 _state.update { it.copy(phase = Phase.Connected, startedAt = live?.startedAt ?: System.currentTimeMillis(), ringing = live == null) }
+                app.scope.launch { for (wait in listOf(2000L, 4000L, 8000L)) { delay(wait); if (room === r) checkRemoteAudio("after ${wait / 1000} s") } }
                 // Register with the system so headsets, watches and cars can mute and end it. The first mute report is just the starting
                 // state, so only a change after it counts.
                 var systemMuted: Boolean? = null
@@ -436,6 +443,7 @@ class CallController(private val app: EmberApp) {
     fun hangup() {
         fitMode.value = null
         mutedForMe.value = emptySet()
+        frameRatios.clear()
         val s = _state.value
         val wasInCall = s.phase == Phase.Connected || s.phase == Phase.Connecting
         val roomId = s.roomId
@@ -466,6 +474,21 @@ class CallController(private val app: EmberApp) {
     }
 
     // ------------------------------------------------------------------ room events
+    /**
+     * Everyone's voice must actually be arriving. After leaving and rejoining, a person's microphone sometimes stayed silent until they muted and
+     * unmuted themselves: so what the room says about each microphone is logged (to see it in `adb logcat -s Call`), and a microphone that is not
+     * subscribed is subscribed again.
+     */
+    private fun checkRemoteAudio(reason: String) {
+        val r = room ?: return
+        for (p in r.remoteParticipants.values) {
+            val pub = p.getTrackPublication(Track.Source.MICROPHONE) as? io.livekit.android.room.track.RemoteTrackPublication ?: continue
+            android.util.Log.i("Call", "voice of ${p.identity?.value}: $reason, subscribed=${pub.subscribed}, track=${pub.track != null}, muted=${pub.muted}")
+            if (!pub.subscribed) runCatching { pub.setSubscribed(true) }
+            (pub.track as? io.livekit.android.room.track.RemoteAudioTrack)?.let { runCatching { it.setVolume(if (p.identity?.value in mutedForMe.value) 0.0 else 1.0) } }
+        }
+    }
+
     private fun onEvent(event: RoomEvent) {
         if (event is RoomEvent.TrackE2EEStateEvent) android.util.Log.d("EmberE2EE", "track ${event.publication.sid} ${event.participant.identity} -> ${event.state}")
         when (event) {
@@ -474,6 +497,8 @@ class CallController(private val app: EmberApp) {
                 hangup()
                 return
             }
+            is RoomEvent.TrackPublished, is RoomEvent.TrackSubscribed, is RoomEvent.TrackSubscriptionFailed, is RoomEvent.TrackUnsubscribed,
+            is RoomEvent.ParticipantConnected -> checkRemoteAudio(event.javaClass.simpleName)
             else -> {}
         }
         rebuild()

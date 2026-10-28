@@ -215,16 +215,19 @@ fun VideoView(room: Room?, track: VideoTrack?, modifier: Modifier = Modifier, mi
         // given an events object when it is set up, and the room sets it up without one.
         val main = android.os.Handler(android.os.Looper.getMainLooper())
         var last = 0f
+        // A frame of the OLD track can still be queued when a picture changes hands (the two pictures swap places): it must not be taken for the new one's shape.
+        var disposed = false
         val shape = livekit.org.webrtc.VideoSink { frame ->
             val w = frame.rotatedWidth
             val h = frame.rotatedHeight
             if (w > 0 && h > 0) {
                 val r = w.toFloat() / h
-                if (Math.abs(r - last) > 0.01f) { last = r; main.post { ratioCallback?.invoke(r) } }
+                if (Math.abs(r - last) > 0.01f) { last = r; main.post { if (!disposed) ratioCallback?.invoke(r) } }
             }
         }
         if (track != null) track.addRenderer(shape)
         onDispose {
+            disposed = true
             if (view != null && track != null) runCatching { track.removeRenderer(view) }
             if (track != null) runCatching { track.removeRenderer(shape) }
         }
@@ -419,13 +422,13 @@ private fun InCall(controller: CallController, state: CallState, pip: Boolean, o
                 // On its side the buttons stand in a column at the right edge, clear of the camera cut-out and the video's middle.
                 AnimatedVisibility(controls, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.align(Alignment.CenterEnd)) {
                     Row(
-                        Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.End)).padding(end = 14.dp),
+                        Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.End.plus(WindowInsetsSides.Vertical))).padding(end = 10.dp, top = 4.dp, bottom = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         if (state.camOn && state.lenses.size > 1) { LensColumn(state, controller); Spacer(Modifier.width(10.dp)) }
                         Column(
-                            Modifier.clip(RoundedCornerShape(32.dp)).background(Color.Black.copy(alpha = 0.45f)).padding(10.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp), horizontalAlignment = Alignment.CenterHorizontally,
+                            Modifier.clip(RoundedCornerShape(28.dp)).background(Color.Black.copy(alpha = 0.45f)).padding(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(5.dp), horizontalAlignment = Alignment.CenterHorizontally,
                         ) { buttons() }
                     }
                 }
@@ -576,7 +579,7 @@ private fun PersonTile(controller: CallController, p: CallPerson, modifier: Modi
     val app = LocalContext.current.ember
     val user = app.repo.users.collectAsState().value[p.userId]
     val speaking = p.speaking && p.micOn
-    var ratio by remember(p.identity) { mutableStateOf(0f) }
+    var ratio by remember(p.identity) { mutableStateOf(controller.knownRatio(p.identity)) }
     val manualFit by controller.fitMode.collectAsState()
     var tile by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
     val tileRatio = if (tile.height > 0) tile.width.toFloat() / tile.height else 1f
@@ -602,7 +605,7 @@ private fun PersonTile(controller: CallController, p: CallPerson, modifier: Modi
                     VideoView(
                         controller.room, track, shape,
                         mirror = p.isLocal && controller.state.value.lens?.front == true, fill = !showFit,
-                        onRatio = { ratio = it; android.util.Log.i("Call", "picture of ${p.name} is ${"%.2f".format(it)} wide over high"); if (!p.isLocal) controller.noteFrame(p.identity, it) },
+                        onRatio = { ratio = it; android.util.Log.i("Call", "picture of ${p.name} is ${"%.2f".format(it)} wide over high"); controller.noteFrame(p.identity, it) },
                     )
                 }
             }
@@ -667,6 +670,49 @@ private fun PipContent(controller: CallController, state: CallState, others: Lis
     if (speaker != null) PersonTile(controller, speaker, Modifier.fillMaxSize(), big = false, forceFit = true)
 }
 
+/**
+ * The other person, in a small window over the rest of the app while a call goes on and its screen is not showing. It stays where you put it (and
+ * after turning the phone), a tap goes back to the call. Keeping their picture drawn here also keeps it flowing: coming back to the call shows it at
+ * once instead of waiting for it to be asked for again.
+ */
+@Composable
+fun CallMini(controller: CallController, state: CallState, modifier: Modifier = Modifier, onOpen: () -> Unit) {
+    val person = state.people.firstOrNull { !it.isLocal && it.camOn && it.camera != null } ?: return
+    val ratio = controller.knownRatio(person.identity).takeIf { it > 0f } ?: 0.56f
+    val landscapePicture = ratio > 1f
+    val tileW = if (landscapePicture) 150.dp else 96.dp
+    val tileH = (tileW.value / ratio).dp.coerceIn(80.dp, 190.dp)
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(8.dp)) {
+        val density = androidx.compose.ui.platform.LocalDensity.current
+        val roomX = with(density) { (maxWidth - tileW).toPx() }.coerceAtLeast(1f)
+        val roomY = with(density) { (maxHeight - tileH).toPx() }.coerceAtLeast(1f)
+        val pos by controller.miniPos.collectAsState()
+        Box(
+            Modifier
+                .offset { androidx.compose.ui.unit.IntOffset((pos.x * roomX).roundToInt(), (pos.y * roomY).roundToInt()) }
+                .size(tileW, tileH)
+                .clip(RoundedCornerShape(14.dp)).border(1.5.dp, Color.White.copy(alpha = 0.4f), RoundedCornerShape(14.dp)).background(Color.Black)
+                .pointerInput(Unit) { detectTapGestures { onOpen() } }
+                .pointerInput(roomX, roomY) {
+                    detectDragGestures(
+                        onDrag = { change, amount ->
+                            change.consume()
+                            val p = controller.miniPos.value
+                            controller.miniPos.value = androidx.compose.ui.geometry.Offset((p.x + amount.x / roomX).coerceIn(0f, 1f), (p.y + amount.y / roomY).coerceIn(0f, 1f))
+                        },
+                        onDragEnd = { controller.saveMiniPos() },
+                        onDragCancel = { controller.saveMiniPos() },
+                    )
+                },
+        ) {
+            key(person.camera) { VideoView(controller.room, person.camera, Modifier.fillMaxSize(), fill = true, onRatio = { controller.noteFrame(person.identity, it) }) }
+            if (!person.micOn) Box(Modifier.align(Alignment.BottomStart).padding(4.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.55f)).padding(4.dp)) {
+                Icon(Icons.Filled.MicOff, null, tint = Color(0xFFFF8A80), modifier = Modifier.size(12.dp))
+            }
+        }
+    }
+}
+
 /** The strip across the top of every other screen while a call is going: who, how long, tap to go back to it. */
 @Composable
 fun CallReturnBar(state: CallState, onReturn: () -> Unit) {
@@ -702,7 +748,7 @@ private fun RoundButton(icon: ImageVector, label: String, off: Boolean = false, 
         else -> Color.White
     }
     Box(
-        Modifier.size(if (small) (if (danger) 52.dp else 46.dp) else if (danger) 58.dp else 52.dp).clip(CircleShape).background(bg).clickable(onClick = onClick),
+        Modifier.size(if (small) (if (danger) 44.dp else 38.dp) else if (danger) 58.dp else 52.dp).clip(CircleShape).background(bg).clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
-    ) { Icon(icon, label, tint = fg, modifier = Modifier.size(if (small) 22.dp else 26.dp)) }
+    ) { Icon(icon, label, tint = fg, modifier = Modifier.size(if (small) 20.dp else 26.dp)) }
 }
