@@ -166,6 +166,13 @@ fun MessageBubble(
             }
         }
 
+    androidx.compose.runtime.CompositionLocalProvider(
+        LocalMediaTouch provides MediaTouch(
+            selecting = selecting,
+            select = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onSelect(bounds) },
+            hold = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); onLongPress(bounds) },
+        ),
+    ) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -266,6 +273,19 @@ fun MessageBubble(
         }
         if (!mine && kind.hasMedia || !mine && kind.sticker) if (!selecting) QuickForward(onForward, Modifier.align(Alignment.CenterVertically))
     }
+    }
+}
+
+/** What a touch on a picture, video, sticker or file inside a bubble does besides opening it: while picking messages it picks this one, and a long press picks it too (so it can be reacted to). */
+private class MediaTouch(val selecting: Boolean, val select: () -> Unit, val hold: () -> Unit)
+
+private val LocalMediaTouch = androidx.compose.runtime.compositionLocalOf { MediaTouch(false, {}, {}) }
+
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+private fun Modifier.mediaTouch(open: () -> Unit): Modifier {
+    val touch = LocalMediaTouch.current
+    return this.combinedClickable(onClick = { if (touch.selecting) touch.select() else open() }, onLongClick = touch.hold)
 }
 
 @Composable
@@ -375,14 +395,14 @@ private fun AttachmentView(
         EncryptedImage(a, roomId, onOpenImage, overlay)
     } else if (a.isImage) {
         val request = remember(a.id) { ImageRequest.Builder(context).data(app.store.server + "/api/attachments/" + a.id).crossfade(true).build() }
-        Box(Modifier.padding(bottom = 2.dp).width(MediaWidth).aspectRatio(ratioOf(a)).clip(shape).clickable { onOpenImage(a) }) {
+        Box(Modifier.padding(bottom = 2.dp).width(MediaWidth).aspectRatio(ratioOf(a)).clip(shape).mediaTouch { onOpenImage(a) }) {
             AsyncImage(model = request, contentDescription = a.filename, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             if (a.mime == "image/gif") Badge("GIF", Modifier.align(Alignment.TopStart).padding(6.dp))
             overlay?.invoke(this)
         }
     } else {
         Row(
-            Modifier.padding(bottom = 4.dp).clip(RoundedCornerShape(12.dp)).background(Color.Black.copy(alpha = 0.06f)).clickable { onOpenFile(a) }.padding(10.dp),
+            Modifier.padding(bottom = 4.dp).clip(RoundedCornerShape(12.dp)).background(Color.Black.copy(alpha = 0.06f)).mediaTouch { onOpenFile(a) }.padding(10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.primary), contentAlignment = Alignment.Center) {
@@ -409,7 +429,7 @@ private fun VideoCard(a: Attachment, roomId: String, overlay: (@Composable BoxSc
     val thumb by produceState<VideoThumbs.Thumb?>(null, a.id) { if (a.encrypted == 0) value = VideoThumbs.of(app, a) }
     val bitmap = thumb?.bitmap
     val ratio = if (bitmap != null) (bitmap.width.toFloat() / bitmap.height).coerceIn(0.6f, 1.8f) else 1.78f
-    Box(Modifier.padding(bottom = 2.dp).width(MediaWidth).aspectRatio(ratio).clip(RoundedCornerShape(11.dp)).background(Color(0xFF1C1C1E)).clickable(onClick = onOpen)) {
+    Box(Modifier.padding(bottom = 2.dp).width(MediaWidth).aspectRatio(ratio).clip(RoundedCornerShape(11.dp)).background(Color(0xFF1C1C1E)).mediaTouch(onOpen)) {
         if (bitmap != null) androidx.compose.foundation.Image(bitmap.asImageBitmap(), a.filename, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         else if (a.encrypted != 0) Icon(Icons.Filled.Lock, null, Modifier.align(Alignment.TopEnd).padding(8.dp).size(16.dp), tint = Color.White.copy(alpha = 0.6f))
         Box(Modifier.align(Alignment.Center).size(52.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.5f)), contentAlignment = Alignment.Center) {
@@ -429,7 +449,7 @@ private fun StickerView(a: Attachment, roomId: String, selected: Boolean, onOpen
     val modifier = Modifier.size(156.dp).then(if (selected) Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)) else Modifier)
     if (a.encrypted == 0) {
         val request = remember(a.id) { ImageRequest.Builder(context).data(app.store.server + "/api/attachments/" + a.id).build() }
-        AsyncImage(model = request, contentDescription = "Sticker", contentScale = ContentScale.Fit, modifier = modifier.clickable { onOpen(a) })
+        AsyncImage(model = request, contentDescription = "Sticker", contentScale = ContentScale.Fit, modifier = modifier.mediaTouch { onOpen(a) })
     } else {
         val revision by app.e2ee.revision.collectAsState()
         val bytes by produceState<ByteArray?>(null, a.id, revision) {
@@ -438,7 +458,7 @@ private fun StickerView(a: Attachment, roomId: String, selected: Boolean, onOpen
         val b = bytes
         if (b != null) AsyncImage(
             model = ImageRequest.Builder(context).data(b).build(), contentDescription = "Sticker", contentScale = ContentScale.Fit,
-            modifier = modifier.clickable { onOpen(a) },
+            modifier = modifier.mediaTouch { onOpen(a) },
         ) else Box(modifier, contentAlignment = Alignment.Center) { Icon(Icons.Filled.Lock, null, tint = Color.Gray) }
     }
 }
@@ -505,7 +525,7 @@ private fun EncryptedImage(a: Attachment, roomId: String, onOpen: (Attachment) -
         }
     }
     val shape = RoundedCornerShape(11.dp)
-    Box(Modifier.padding(bottom = 2.dp).width(MediaWidth).aspectRatio(ratioOf(a)).clip(shape).background(Color.Black.copy(alpha = 0.08f)).clickable { onOpen(a) }, contentAlignment = Alignment.Center) {
+    Box(Modifier.padding(bottom = 2.dp).width(MediaWidth).aspectRatio(ratioOf(a)).clip(shape).background(Color.Black.copy(alpha = 0.08f)).mediaTouch { onOpen(a) }, contentAlignment = Alignment.Center) {
         val b = bitmap
         if (b != null) {
             androidx.compose.foundation.Image(b.asImageBitmap(), a.filename, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())

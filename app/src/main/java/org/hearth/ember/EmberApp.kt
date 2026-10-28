@@ -40,6 +40,7 @@ class EmberApp : Application(), ImageLoaderFactory {
     val ringer by lazy { org.hearth.ember.notify.HeadsetRinger(this) }
     val stickers by lazy { org.hearth.ember.data.Favourites(this, org.hearth.ember.data.Favourites.Kind.Sticker) }
     val gifs by lazy { org.hearth.ember.data.Favourites(this, org.hearth.ember.data.Favourites.Kind.Gif) }
+    @Volatile private var lastNudgeBuzz = 0L
     val online by lazy { org.hearth.ember.data.OnlineMedia(this, client) }
     val sounds by lazy { org.hearth.ember.notify.SoundPlayer(this) }
     val updater by lazy { org.hearth.ember.data.Updater(this, client, BuildConfig.UPDATE_REPO, BuildConfig.VERSION_NAME) }
@@ -75,6 +76,10 @@ class EmberApp : Application(), ImageLoaderFactory {
         scope.launch {
             repo.nudges.collect { (room, _) ->
                 if (repo.viewingRoom == room && repo.appVisible) return@collect
+                // However many arrive, the phone buzzes at most once every 1.5 seconds.
+                val tick = System.currentTimeMillis()
+                if (tick - lastNudgeBuzz < 1500) return@collect
+                lastNudgeBuzz = tick
                 val inCall = callController?.state?.value?.phase.let { it == org.hearth.ember.call.Phase.Connected || it == org.hearth.ember.call.Phase.Connecting }
                 runCatching {
                     val vibrator = getSystemService(android.content.Context.VIBRATOR_SERVICE) as? android.os.Vibrator

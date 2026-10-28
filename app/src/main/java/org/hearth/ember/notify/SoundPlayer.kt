@@ -44,8 +44,15 @@ class SoundPlayer(private val context: Context) {
     // ------------------------------------------------------------------ the nudge: the classic sound, fetched from your own server once and kept
     // The file name carries a version: an older, much quieter nudge.mp3 may be sitting in the cache and would otherwise be kept for ever.
     private val nudgeFile = java.io.File(context.cacheDir, "nudge-v2.mp3").also { java.io.File(context.cacheDir, "nudge.mp3").delete() }
-    private val nudgeVoices = java.util.concurrent.atomic.AtomicInteger(0)
+    /** The nudge sounds playing now, with when each started. A sound that never reports its end (cut off by a call's audio focus, say) must not count for ever. */
+    private val nudgePlayers = java.util.concurrent.CopyOnWriteArrayList<Pair<android.media.MediaPlayer, Long>>()
+    private var lastNudgeAt = 0L
     @Volatile private var fetching = false
+
+    private fun dropNudge(player: android.media.MediaPlayer) {
+        nudgePlayers.removeAll { it.first === player }
+        runCatching { player.release() }
+    }
 
     /** Play the nudge sound (the same file the web app plays). The first time it is downloaded; until then a nudge is silent. */
     fun nudge(loud: Boolean = false) {
@@ -53,19 +60,24 @@ class SoundPlayer(private val context: Context) {
         if (!app.prefs.soundsOn.value) return
         if (context.getSystemService(AudioManager::class.java).ringerMode != AudioManager.RINGER_MODE_NORMAL) return
         if (!nudgeFile.exists() || nudgeFile.length() == 0L) { fetchNudge(); return }
-        if (nudgeVoices.get() >= 4) return
+        val now = System.currentTimeMillis()
+        // A flood of nudges (an autoclicker once sent thousands) is one sound at a time, not a wall of them; and a sound stuck for over three
+        // seconds is let go, so a stuck one can never silence the next nudges.
+        for ((p, started) in nudgePlayers) if (now - started > 3000) dropNudge(p)
+        if (now - lastNudgeAt < 600 || nudgePlayers.size >= 3) return
+        lastNudgeAt = now
         runCatching {
-            nudgeVoices.incrementAndGet()
             val player = android.media.MediaPlayer()
-            // Loud: in a call the nudge is how someone finds a phone put down somewhere, so it is played as an alarm (the loudspeaker, over the call).
+            nudgePlayers.add(player to now)
+            // Loud: in a call the nudge is how someone finds a phone put down in the house, so it is played as an alarm (the loudspeaker, over the call).
             player.setAudioAttributes(AudioAttributes.Builder().setUsage(if (loud) AudioAttributes.USAGE_ALARM else AudioAttributes.USAGE_NOTIFICATION_COMMUNICATION_INSTANT).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
             player.setDataSource(nudgeFile.absolutePath)
-            player.setOnCompletionListener { it.release(); nudgeVoices.decrementAndGet() }
-            player.setOnErrorListener { mp, _, _ -> mp.release(); nudgeVoices.decrementAndGet(); true }
+            player.setOnCompletionListener { dropNudge(it) }
+            player.setOnErrorListener { mp, what, extra -> android.util.Log.w("NudgeSound", "player error $what/$extra"); dropNudge(mp); true }
             player.setVolume(1f, 1f)
             player.setOnPreparedListener { it.start() }
             player.prepareAsync()
-        }.onFailure { nudgeVoices.decrementAndGet() }
+        }.onFailure { android.util.Log.w("NudgeSound", "could not play: $it") }
     }
 
     /** Get the sound ready ahead of the first nudge (called once signed in). */
