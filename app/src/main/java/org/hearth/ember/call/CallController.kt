@@ -56,6 +56,8 @@ data class CallPerson(
     val screen: VideoTrack?,
     /** Width over height of the shared screen, so it can be fitted whole into any window. */
     val screenRatio: Float = 16f / 9f,
+    /** You switched this person's sound off, for yourself only: they are not told. */
+    val mutedByMe: Boolean = false,
 )
 
 data class CallOutput(val id: String, val label: String, val kind: Kind) {
@@ -97,6 +99,13 @@ class CallController(private val app: EmberApp) {
     /** Where your own small picture sits, as a fraction of the room it has to move in (0,0 top left to 1,1 bottom right): free, and kept across turning the phone and across calls. */
     val selfPos = MutableStateFlow(androidx.compose.ui.geometry.Offset(viewPrefs.getFloat("selfX", 1f), viewPrefs.getFloat("selfY", 0.06f)))
     fun saveSelfPos() { viewPrefs.edit().putFloat("selfX", selfPos.value.x).putFloat("selfY", selfPos.value.y).apply() }
+
+    /** People whose sound you switched off for yourself (by identity). Only this phone's playback changes. */
+    val mutedForMe = MutableStateFlow<Set<String>>(emptySet())
+    fun toggleMuteFor(identity: String) {
+        mutedForMe.update { if (identity in it) it - identity else it + identity }
+        rebuild()
+    }
 
     /** How other people's pictures are drawn: null = by themselves (whole picture when its shape does not match the window), true = whole picture, false = filling the window. */
     val fitMode = MutableStateFlow<Boolean?>(null)
@@ -426,6 +435,7 @@ class CallController(private val app: EmberApp) {
 
     fun hangup() {
         fitMode.value = null
+        mutedForMe.value = emptySet()
         val s = _state.value
         val wasInCall = s.phase == Phase.Connected || s.phase == Phase.Connecting
         val roomId = s.roomId
@@ -487,8 +497,14 @@ class CallController(private val app: EmberApp) {
                 speaking = p.isSpeaking,
                 camera = cam?.track as? VideoTrack,
                 screen = screen?.track as? VideoTrack,
+                mutedByMe = !local && identity in mutedForMe.value,
                 screenRatio = screen?.dimensions?.let { if (it.width > 0 && it.height > 0) it.width.toFloat() / it.height else null } ?: (16f / 9f),
             )
+        }
+        // The volume of everyone's voice follows the "mute for me" choices (a track that arrives later is caught on the next event).
+        for (p in r.remoteParticipants.values) {
+            val track = p.getTrackPublication(Track.Source.MICROPHONE)?.track as? io.livekit.android.room.track.RemoteAudioTrack ?: continue
+            runCatching { track.setVolume(if (p.identity?.value in mutedForMe.value) 0.0 else 1.0) }
         }
         val people = listOf(person(r.localParticipant, true)) + r.remoteParticipants.values.map { person(it, false) }
         // The floating window shows the speaker's (or first) camera: take that picture's shape.

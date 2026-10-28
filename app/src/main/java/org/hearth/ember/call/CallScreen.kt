@@ -49,6 +49,7 @@ import androidx.compose.material.icons.filled.PhoneInTalk
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.VideocamOff
 import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.Hearing
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -608,6 +609,34 @@ private fun PersonTile(controller: CallController, p: CallPerson, modifier: Modi
         } else {
             Avatar(p.name, user?.avatar, user?.let { parseColor(it.avatarColor) } ?: Color.Gray, if (big) 120.dp else 56.dp)
         }
+        // What is going on with this person's sound, always visible: muted by themselves, or muted by you for yourself (the grid labels it below).
+        val showBadges = !ring && ((!p.micOn) || p.mutedByMe)
+        val canMuteForMe = !p.isLocal && !forceFit
+        val buttonShown = canMuteForMe && (!big || LocalCallControls.current)
+        if (showBadges || (buttonShown && big)) Row(
+            Modifier.align(Alignment.TopStart).then(
+                if (big) Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top.plus(WindowInsetsSides.Start))).padding(start = 12.dp, top = 64.dp)
+                else Modifier.padding(6.dp),
+            ),
+            horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (!p.micOn) Row(Modifier.clip(RoundedCornerShape(14.dp)).background(Color.Black.copy(alpha = 0.55f)).padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.MicOff, null, tint = Color(0xFFFF8A80), modifier = Modifier.size(if (big) 16.dp else 12.dp))
+                if (big) Text(" Muted", color = Color.White, style = MaterialTheme.typography.labelMedium)
+            }
+            if (p.mutedByMe) Row(Modifier.clip(RoundedCornerShape(14.dp)).background(Color.Black.copy(alpha = 0.55f)).padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.VolumeOff, null, tint = Color(0xFFFFCC80), modifier = Modifier.size(if (big) 16.dp else 12.dp))
+                if (big) Text(" You muted them", color = Color.White, style = MaterialTheme.typography.labelMedium)
+            }
+            if (buttonShown && big) Box(
+                Modifier.size(36.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.55f)).clickable { controller.toggleMuteFor(p.identity) },
+                contentAlignment = Alignment.Center,
+            ) { Icon(if (p.mutedByMe) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp, if (p.mutedByMe) "Hear ${p.name} again" else "Mute ${p.name} for me", tint = Color.White, modifier = Modifier.size(20.dp)) }
+        }
+        if (buttonShown && !big) Box(
+            Modifier.align(Alignment.TopEnd).padding(6.dp).size(30.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.55f)).clickable { controller.toggleMuteFor(p.identity) },
+            contentAlignment = Alignment.Center,
+        ) { Icon(if (p.mutedByMe) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp, if (p.mutedByMe) "Hear ${p.name} again" else "Mute ${p.name} for me", tint = Color.White, modifier = Modifier.size(16.dp)) }
         // Flipping the camera lives on your own picture, as in Element Call, so the control bar stays uncrowded.
         val st = controller.state.collectAsState().value
         if (p.isLocal && p.camOn && st.lenses.size > 1) {
@@ -624,6 +653,7 @@ private fun PersonTile(controller: CallController, p: CallPerson, modifier: Modi
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (!p.micOn) { Icon(Icons.Filled.MicOff, null, tint = Color.White, modifier = Modifier.size(14.dp)); Spacer(Modifier.width(4.dp)) }
+                if (p.mutedByMe) { Icon(Icons.Filled.VolumeOff, null, tint = Color(0xFFFFCC80), modifier = Modifier.size(14.dp)); Spacer(Modifier.width(4.dp)) }
                 Text(if (p.isLocal) "You" else p.name, color = Color.White, style = MaterialTheme.typography.labelLarge, maxLines = 1)
             }
         }
