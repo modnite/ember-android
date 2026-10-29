@@ -180,7 +180,9 @@ class CallController(private val app: EmberApp) {
         if (encrypted) System.loadLibrary("lkjingle_peerconnection_so") // the frame encryption lives in the same native library as the call engine
         keyProvider = if (encrypted) io.livekit.android.e2ee.BaseKeyProvider() else null
         val share = RoomOptions(
-            adaptiveStream = true, dynacast = true,
+            // adaptiveStream is off on purpose: it pauses a picture the moment its view leaves the screen (into the floating window, or while the call
+            // screen is not showing), and bringing everyone's pictures back on return then takes seconds in a group. Dynacast still saves the sender's work.
+            adaptiveStream = false, dynacast = true,
             e2eeOptions = keyProvider?.let { io.livekit.android.e2ee.E2EEOptions(keyProvider = it) },
             screenShareTrackCaptureDefaults = LocalVideoTrackOptions(isScreencast = true, captureParams = VideoCaptureParameter(1920, 1080, 60)),
             screenShareTrackPublishDefaults = io.livekit.android.room.participant.VideoTrackPublishDefaults(
@@ -538,11 +540,17 @@ class CallController(private val app: EmberApp) {
         // The floating window shows the speaker's (or first) camera: take that picture's shape.
         val shown = r.remoteParticipants.values.firstOrNull { it.isSpeaking && it.getTrackPublication(Track.Source.CAMERA)?.track != null }
             ?: r.remoteParticipants.values.firstOrNull { it.getTrackPublication(Track.Source.CAMERA)?.track != null }
-        pipIdentity = shown?.identity?.value
-        val dim = shown?.getTrackPublication(Track.Source.CAMERA)?.dimensions
-        val seen = pipIdentity?.let { frameRatios[it] }
-        if (seen != null) setPipRatio(seen)
-        else if (dim != null && dim.width > 0 && dim.height > 0) setPipRatio(dim.width.toFloat() / dim.height)
+        if (r.remoteParticipants.size >= 2) {
+            // A group's window keeps one shape whoever is shown (it follows the speaker, and a window that changes shape with every speaker jumps about).
+            pipIdentity = null
+            setPipRatio(4f / 3f)
+        } else {
+            pipIdentity = shown?.identity?.value
+            val dim = shown?.getTrackPublication(Track.Source.CAMERA)?.dimensions
+            val seen = pipIdentity?.let { frameRatios[it] }
+            if (seen != null) setPipRatio(seen)
+            else if (dim != null && dim.width > 0 && dim.height > 0) setPipRatio(dim.width.toFloat() / dim.height)
+        }
         val sharing = r.localParticipant.getTrackPublication(Track.Source.SCREEN_SHARE) != null
         if (!sharing && projectionWanted && !sharingStarting) { projectionWanted = false; CallService.start(app) } // the system's own stop chip ended it
         val changed = sharing != _state.value.screenOn
@@ -554,9 +562,16 @@ class CallController(private val app: EmberApp) {
     fun onLeaveHint(activity: Activity) {
         Log.i("Call", "leave hint, phase=" + _state.value.phase)
         if (_state.value.phase != Phase.Connected || Build.VERSION.SDK_INT < 26) return
-        runCatching { activity.enterPictureInPictureMode(pipParams(activity)) }
-            .onSuccess { Log.i("Call", "entered pip: $it") }
-            .onFailure { Log.w("Call", "pip failed", it) }
+        fun attempt(n: Int) {
+            runCatching { activity.enterPictureInPictureMode(pipParams(activity)) }
+                .onSuccess {
+                    Log.i("Call", "entered pip: $it (try $n)")
+                    // The system sometimes says no while the screen is still changing over; ask again a moment later, a few times.
+                    if (!it && n < 3 && !pipMode.value) android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ if (!pipMode.value && !activity.isFinishing) attempt(n + 1) }, 150)
+                }
+                .onFailure { Log.w("Call", "pip failed", it) }
+        }
+        attempt(1)
     }
 
     fun pipParams(context: Context): PictureInPictureParams {

@@ -15,6 +15,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.layout.height
+import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -109,22 +112,41 @@ fun MediaPicker(
     }
 
     // The grid takes what the screen can spare, so the sheet still fits sideways.
-    val gridMax = availableHeight?.let { (it - 150.dp).coerceAtLeast(70.dp) } ?: (LocalConfiguration.current.screenHeightDp * 0.42f).dp.coerceIn(150.dp, 360.dp)
+    // Sideways the drawer is short: the sources and the search share one row (the magnifier opens the search) so the grid keeps the room.
+    val compact = availableHeight != null && availableHeight < 240.dp
+    var searchOpen by remember { mutableStateOf(false) }
+    val gridMax = availableHeight?.let { (it - (if (compact) 56.dp else 150.dp)).coerceAtLeast(70.dp) } ?: (LocalConfiguration.current.screenHeightDp * 0.42f).dp.coerceIn(150.dp, 360.dp)
     val tile = if (LocalConfiguration.current.screenHeightDp < 500) 76.dp else 92.dp
 
     Column(Modifier.fillMaxWidth().then(if (availableHeight == null) Modifier.heightIn(min = gridMax + 150.dp) else Modifier)) {
-        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        val chips: @Composable () -> Unit = {
             FilterChip(selected = selected == "saved", onClick = { selected = "saved" }, label = { Text("Saved") })
             for (s in sources) FilterChip(selected = selected == s.id, onClick = { selected = s.id }, label = { Text(s.label) })
+        }
+        val searchField: @Composable (Modifier) -> Unit = { m ->
+            OutlinedTextField(
+                value = query, onValueChange = { query = it }, singleLine = true, leadingIcon = { Icon(Icons.Filled.Search, null) },
+                placeholder = { Text(if (source is org.hearth.ember.data.SignalSource) "Search packs (cat, meme, hello…)" else "Search ${source?.label ?: ""}") }, modifier = m,
+            )
+        }
+        if (compact) {
+            Row(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (searchOpen && source != null) {
+                    IconButton(onClick = { searchOpen = false; query = "" }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Close the search") }
+                    searchField(Modifier.weight(1f))
+                } else {
+                    Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) { chips() }
+                    if (source != null) IconButton(onClick = { searchOpen = true }) { Icon(Icons.Filled.Search, "Search") }
+                }
+            }
+        } else {
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) { chips() }
         }
         if (source == null) {
             FavouritesGrid(sticker = kind == MediaKind.Sticker, onSend = onSendFavourite, gridMax = gridMax)
             return@Column
         }
-        OutlinedTextField(
-            value = query, onValueChange = { query = it }, singleLine = true, leadingIcon = { Icon(Icons.Filled.Search, null) },
-            placeholder = { Text(if (source is org.hearth.ember.data.SignalSource) "Search packs (cat, meme, hello…)" else "Search ${source.label}") }, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-        )
+        if (!compact) searchField(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp))
         if (!source.ready()) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp)) {
                 Text(

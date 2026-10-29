@@ -38,6 +38,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.StickyNote2
+import androidx.compose.material.icons.filled.Gif
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -388,9 +391,19 @@ fun ChatScreen(nav: NavHostController, roomId: String, embedded: Boolean = false
             actions = {
                 if (room != null) {
                     val live = calls[roomId]
-                    IconButton(onClick = { nav.navigate("call/$roomId?video=true") }) { Icon(Icons.Filled.Videocam, "Video call") }
-                    IconButton(onClick = { nav.navigate("call/$roomId?video=false") }) {
-                        Icon(Icons.Filled.Call, if (live != null) "Join call" else "Voice call", tint = if (live != null) EmberTheme.colors.online else MaterialTheme.colorScheme.onSurface)
+                    // The nudge sits where the video call button used to be, in the bar and clear of the messages.
+                    val nudgeInBar by app.prefs.nudgeButton.collectAsState()
+                    if (nudgeInBar) IconButton(onClick = sendNudge) { Icon(Icons.Filled.WavingHand, "Nudge", tint = MaterialTheme.colorScheme.primary) }
+                    // One call button, as in WhatsApp: a call already going is joined by a tap, otherwise it asks voice or video.
+                    var callMenu by remember { mutableStateOf(false) }
+                    Box {
+                        IconButton(onClick = { if (live != null) nav.navigate("call/$roomId?video=false") else callMenu = true }) {
+                            Icon(Icons.Filled.Call, if (live != null) "Join call" else "Call", tint = if (live != null) EmberTheme.colors.online else MaterialTheme.colorScheme.onSurface)
+                        }
+                        DropdownMenu(expanded = callMenu, onDismissRequest = { callMenu = false }) {
+                            DropdownMenuItem(text = { Text("Voice call") }, leadingIcon = { Icon(Icons.Filled.Call, null) }, onClick = { callMenu = false; nav.navigate("call/$roomId?video=false") })
+                            DropdownMenuItem(text = { Text("Video call") }, leadingIcon = { Icon(Icons.Filled.Videocam, null) }, onClick = { callMenu = false; nav.navigate("call/$roomId?video=true") })
+                        }
                     }
                 }
                 Box {
@@ -483,11 +496,6 @@ fun ChatScreen(nav: NavHostController, roomId: String, embedded: Boolean = false
                     }
                     if (room.encrypted) item { EncryptedNotice() }
                 }
-                val showNudgeButton by app.prefs.nudgeButton.collectAsState()
-                if (showNudgeButton) SmallFloatingActionButton(
-                    onClick = sendNudge, modifier = Modifier.align(Alignment.BottomStart).padding(12.dp),
-                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f), contentColor = MaterialTheme.colorScheme.primary,
-                ) { Icon(Icons.Filled.WavingHand, "Nudge") }
                 androidx.compose.animation.AnimatedVisibility(visible = !atBottom, modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp)) {
                     SmallFloatingActionButton(onClick = { scope.launch { listState.animateScrollToItem(0) } }, containerColor = MaterialTheme.colorScheme.surface) {
                         Icon(Icons.Filled.KeyboardArrowDown, "Latest")
@@ -543,7 +551,7 @@ fun ChatScreen(nav: NavHostController, roomId: String, embedded: Boolean = false
                 onFile = { attachMenu = false; pickFile.launch(arrayOf("*/*")) },
             )
             if (emojiForDraft) EmojiPanel(
-                height = minOf(keyboardDp, androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp * 0.5f).dp,
+                height = keyboardDp.coerceAtMost(androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp * 0.55f).coerceAtLeast(if (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp < 500) 210f else 260f).dp,
                 onSticker = { f -> sendFavourite(f, "image/webp") }, onGif = { f -> sendFavourite(f, "image/gif") },
                 onOnline = { item, kind -> sendOnline(item, kind) }, onBytes = { bytes, name, mime -> sendReady(bytes, name, mime) },
                 onSettings = { emojiForDraft = false; nav.navigate("settings/online") },
@@ -803,21 +811,19 @@ private val AllEmoji: List<EmojiItem> by lazy {
     items
 }
 
-/**
- * Emoji, stickers and GIFs in one sheet. Emoji: tabs by kind and a search by name, a tap uses one (typed into the message, or as a
- * reaction). Stickers and GIFs (only when sending a message, not when reacting) are the ones you keep; a tap sends one.
- */
+/** The sheet used for picking a reaction: the emoji only, a tap uses one. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun EmojiSheet(onDismiss: () -> Unit, onPick: (String) -> Unit) {
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-        EmojiBody(null, onPick = onPick)
+        EmojiBody(380.dp, onPick = onPick)
+        Spacer(Modifier.navigationBarsPadding())
     }
 }
 
 /**
- * The drawer under the message box, where the keyboard was: the box stays in view above it, and tapping the box brings the keyboard back (the
- * face button switches the same way). It is as tall as the keyboard was, so nothing jumps.
+ * The drawer under the message box, where the keyboard was, laid out like WhatsApp's and Signal's: the message box stays in view above it, and
+ * tapping the box (or the face button) brings the keyboard back. It is [height] tall, with the system bar below it in addition, so none of it is hidden.
  */
 @Composable
 private fun EmojiPanel(
@@ -825,51 +831,96 @@ private fun EmojiPanel(
     onBytes: (ByteArray, String, String) -> Unit, onSettings: () -> Unit, onPick: (String) -> Unit,
 ) {
     Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth().widthIn(max = 880.dp)) {
-        Column(Modifier.navigationBarsPadding()) {
+        Column {
             EmojiBody(height, onSticker, onGif, onOnline, onBytes, onSettings, onPick)
+            Spacer(Modifier.navigationBarsPadding())
         }
     }
 }
 
+private val EmojiCategoryIcons = listOf("⭐", "😀", "🐱", "🚗", "💡", "❤️")
+
 /**
- * Emoji, stickers and GIFs. Emoji: tabs by kind and a search by name, a tap uses one (typed into the message, or as a reaction). Stickers and
- * GIFs (only when sending a message, not when reacting) are the ones you keep, or search online; a tap sends one. With a [height] it is a
- * panel of exactly that height (the grids scroll inside it); without, a sheet's worth.
+ * Emoji, GIFs and stickers (the last two only when sending a message, not when reacting). The emoji grid fills the panel and scrolls, with a row of
+ * categories above it and the three kinds along the bottom. The magnifier turns the top row into a search whose answers are one strip of
+ * suggestions, not the whole list; the panel shrinks to that strip. [height] is the panel's own height.
  */
 @Composable
 private fun EmojiBody(
-    height: androidx.compose.ui.unit.Dp?, onSticker: ((File) -> Unit)? = null, onGif: ((File) -> Unit)? = null,
+    height: androidx.compose.ui.unit.Dp, onSticker: ((File) -> Unit)? = null, onGif: ((File) -> Unit)? = null,
     onOnline: ((org.hearth.ember.data.OnlineItem, MediaKind) -> Unit)? = null, onBytes: (ByteArray, String, String) -> Unit = { _, _, _ -> },
     onSettings: () -> Unit = {}, onPick: (String) -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
-    var tab by remember { mutableStateOf(0) }
-    var section by remember { mutableStateOf(0) }
-    val list = remember(query, tab) {
+    var category by remember { mutableStateOf(0) }
+    var searching by remember { mutableStateOf(false) }
+    var section by remember { mutableStateOf(0) } // 0 emoji, 1 GIFs, 2 stickers
+    val kinds = onSticker != null && onGif != null
+    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+    LaunchedEffect(category) { gridState.scrollToItem(0) }
+    LaunchedEffect(searching) { if (searching) { focus.requestFocus(); keyboard?.show() } }
+    val suggestions = remember(query) {
         val q = query.trim().lowercase()
-        if (q.isNotEmpty()) AllEmoji.filter { it.name.contains(q) } else AllEmoji.filter { it.category == tab }
+        if (q.isEmpty()) emptyList() else AllEmoji.filter { it.name.contains(q) }.take(40)
     }
-    Column(Modifier.fillMaxWidth().then(if (height != null) Modifier.height(height) else Modifier)) {
-        val sections = onSticker != null && onGif != null
-        if (sections) androidx.compose.material3.TabRow(selectedTabIndex = section, containerColor = Color.Transparent) {
-            listOf("Emoji", "Stickers", "GIFs").forEachIndexed { i, name -> androidx.compose.material3.Tab(selected = section == i, onClick = { section = i }, text = { Text(name) }) }
+    val barHeight = if (kinds) (if (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp < 500) 40.dp else 48.dp) else 0.dp
+    val shown = if (searching) 132.dp else height
+    Column(Modifier.fillMaxWidth().height(shown)) {
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            when {
+                section == 1 && kinds -> MediaPicker(MediaKind.Gif, onGif!!, { onOnline?.invoke(it, MediaKind.Gif) }, onBytes, onSettings, height - barHeight)
+                section == 2 && kinds -> MediaPicker(MediaKind.Sticker, onSticker!!, { onOnline?.invoke(it, MediaKind.Sticker) }, onBytes, onSettings, height - barHeight)
+                searching -> Column(Modifier.fillMaxSize()) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = { searching = false; query = ""; focusManager.clearFocus(); keyboard?.hide() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Close the search") }
+                        androidx.compose.material3.TextField(
+                            value = query, onValueChange = { query = it }, singleLine = true, placeholder = { Text("Search emoji") },
+                            modifier = Modifier.weight(1f).focusRequester(focus),
+                            colors = TextFieldDefaults.colors(focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent),
+                        )
+                    }
+                    if (suggestions.isEmpty()) Text(
+                        if (query.isBlank()) "Type a word: heart, cat, pizza…" else "No emoji for that.",
+                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                    ) else androidx.compose.foundation.lazy.LazyRow(contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp)) {
+                        items(suggestions.size) { i -> Text(suggestions[i].glyph, fontSize = 30.sp, modifier = Modifier.clip(CircleShape).clickable { onPick(suggestions[i].glyph) }.padding(8.dp)) }
+                    }
+                }
+                else -> Column(Modifier.fillMaxSize()) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = { searching = true }) { Icon(Icons.Filled.Search, "Search emoji") }
+                        androidx.compose.foundation.lazy.LazyRow(Modifier.weight(1f)) {
+                            items(EmojiCategories.size) { i ->
+                                Box(
+                                    Modifier.padding(horizontal = 2.dp).size(40.dp).clip(CircleShape)
+                                        .background(if (category == i) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else Color.Transparent).clickable { category = i },
+                                    contentAlignment = Alignment.Center,
+                                ) { Text(EmojiCategoryIcons.getOrElse(i) { "•" }, fontSize = 20.sp) }
+                            }
+                        }
+                    }
+                    val list = remember(category) { AllEmoji.filter { it.category == category } }
+                    androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+                        columns = androidx.compose.foundation.lazy.grid.GridCells.Adaptive(46.dp), state = gridState,
+                        modifier = Modifier.fillMaxWidth().weight(1f).padding(horizontal = 8.dp),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 8.dp, top = 2.dp),
+                    ) {
+                        items(list.size) { i -> Text(list[i].glyph, fontSize = 28.sp, modifier = Modifier.clip(CircleShape).clickable { onPick(list[i].glyph) }.padding(8.dp)) }
+                    }
+                }
+            }
         }
-        val room = height?.let { it - 48.dp }
-        if (sections && section == 1) { MediaPicker(MediaKind.Sticker, onSticker!!, { onOnline?.invoke(it, MediaKind.Sticker) }, onBytes, onSettings, room); return@Column }
-        if (sections && section == 2) { MediaPicker(MediaKind.Gif, onGif!!, { onOnline?.invoke(it, MediaKind.Gif) }, onBytes, onSettings, room); return@Column }
-        OutlinedTextField(
-            value = query, onValueChange = { query = it }, singleLine = true, placeholder = { Text("Search emoji (heart, cat, pizza…)") },
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
-        )
-        if (query.isBlank()) androidx.compose.material3.ScrollableTabRow(selectedTabIndex = tab, edgePadding = 8.dp) {
-            EmojiCategories.forEachIndexed { i, name -> androidx.compose.material3.Tab(selected = tab == i, onClick = { tab = i }, text = { Text(name) }) }
-        }
-        androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
-            columns = androidx.compose.foundation.lazy.grid.GridCells.Adaptive(48.dp),
-            modifier = Modifier.fillMaxWidth().then(if (height != null) Modifier.weight(1f) else Modifier.heightIn(max = 420.dp)).padding(horizontal = 12.dp),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp, top = 8.dp),
-        ) {
-            items(list.size) { i -> Text(list[i].glyph, fontSize = 28.sp, modifier = Modifier.clip(CircleShape).clickable { onPick(list[i].glyph) }.padding(8.dp)) }
+        // The three kinds along the bottom, as in the messengers; hidden while searching so the strip sits right above the keyboard.
+        if (kinds && !searching) Row(Modifier.fillMaxWidth().height(barHeight), verticalAlignment = Alignment.CenterVertically) {
+            listOf(Icons.Filled.EmojiEmotions to "Emoji", Icons.Filled.Gif to "GIFs", Icons.AutoMirrored.Filled.StickyNote2 to "Stickers").forEachIndexed { i, (icon, label) ->
+                Box(Modifier.weight(1f).fillMaxHeight().clickable { section = i }, contentAlignment = Alignment.Center) {
+                    Icon(icon, label, tint = if (section == i) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (section == i) Box(Modifier.align(Alignment.BottomCenter).width(36.dp).height(3.dp).clip(RoundedCornerShape(2.dp)).background(MaterialTheme.colorScheme.primary))
+                }
+            }
         }
     }
 }

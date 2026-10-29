@@ -410,6 +410,14 @@ private fun InCall(controller: CallController, state: CallState, pip: Boolean, o
                         if (o.mutedByMe) "Hear ${o.name} again" else "Mute ${o.name} for me", on = o.mutedByMe, small = landscape,
                     ) { controller.toggleMuteFor(o.identity) }
                 }
+                // In a group the pictures are fitted whole or filled together (a one-to-one call has the button on its big picture).
+                if (others.size >= 2 && others.any { it.camOn }) {
+                    val fitNow by controller.shownFit.collectAsState()
+                    RoundButton(
+                        if (fitNow) Icons.Filled.Fullscreen else Icons.Filled.FitScreen,
+                        if (fitNow) "Fill the tiles" else "Fit whole pictures", on = fitNow, small = landscape,
+                    ) { controller.toggleFit() }
+                }
                 RoundButton(
                     if (state.screenOn) Icons.Filled.StopScreenShare else Icons.Filled.ScreenShare, if (state.screenOn) "Stop sharing" else "Share screen",
                     on = state.screenOn, small = landscape,
@@ -555,6 +563,8 @@ private fun Waiting(state: CallState) {
 
 @Composable
 private fun Grid(controller: CallController, people: List<CallPerson>, landscape: Boolean) {
+    val chosenFit by controller.fitMode.collectAsState()
+    androidx.compose.runtime.SideEffect { controller.shownFit.value = chosenFit ?: false }
     val columns = if (landscape) (if (people.size <= 3) people.size else if (people.size <= 8) 4 else 5) else if (people.size <= 4) 2 else 3
     val rows = (people.size + columns - 1) / columns
     Column(
@@ -669,10 +679,32 @@ private fun PersonTile(controller: CallController, p: CallPerson, modifier: Modi
     }
 }
 
+/**
+ * Who a small window (the floating call window, the picture over the app) shows in a group: whoever speaks, and they stay shown until somebody
+ * else speaks (so it does not flicker back when there is a pause), but not changing more often than every two seconds. With [needCamera] only
+ * people whose camera is on are candidates.
+ */
+@Composable
+private fun rememberFocus(others: List<CallPerson>, needCamera: Boolean): CallPerson? {
+    fun eligible(p: CallPerson) = !needCamera || (p.camOn && p.camera != null)
+    var focusId by remember { mutableStateOf<String?>(null) }
+    var switchedAt by remember { mutableStateOf(0L) }
+    val speakerId = others.firstOrNull { it.speaking && it.micOn && eligible(it) }?.identity
+    LaunchedEffect(speakerId) {
+        if (speakerId != null && speakerId != focusId) {
+            val wait = switchedAt + 2000 - System.currentTimeMillis()
+            if (wait > 0) kotlinx.coroutines.delay(wait)
+            focusId = speakerId
+            switchedAt = System.currentTimeMillis()
+        }
+    }
+    return others.firstOrNull { it.identity == focusId && eligible(it) } ?: others.firstOrNull { eligible(it) && it.camOn } ?: others.firstOrNull { eligible(it) }
+}
+
 /** What the floating window shows: only people's video, nothing to tap, nothing but pictures. The system draws the mute and end controls. */
 @Composable
 private fun PipContent(controller: CallController, state: CallState, others: List<CallPerson>, me: CallPerson?) {
-    val speaker = others.firstOrNull { it.speaking } ?: others.firstOrNull { it.camOn } ?: others.firstOrNull() ?: me
+    val speaker = rememberFocus(others, needCamera = false) ?: others.firstOrNull { it.camOn } ?: others.firstOrNull() ?: me
     if (speaker != null) PersonTile(controller, speaker, Modifier.fillMaxSize(), big = false, forceFit = true)
 }
 
@@ -683,7 +715,7 @@ private fun PipContent(controller: CallController, state: CallState, others: Lis
  */
 @Composable
 fun CallMini(controller: CallController, state: CallState, modifier: Modifier = Modifier, onOpen: () -> Unit) {
-    val person = state.people.firstOrNull { !it.isLocal && it.camOn && it.camera != null } ?: return
+    val person = rememberFocus(state.people.filter { !it.isLocal }, needCamera = true) ?: return
     val ratio = controller.knownRatio(person.identity).takeIf { it > 0f } ?: 0.56f
     val landscapePicture = ratio > 1f
     val tileW = if (landscapePicture) 150.dp else 96.dp

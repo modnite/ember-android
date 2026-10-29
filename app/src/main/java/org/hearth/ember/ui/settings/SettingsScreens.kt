@@ -295,7 +295,7 @@ private fun ChatsPage() {
     val sendHd by app.prefs.sendHd.collectAsState()
     ToggleRow(Icons.Filled.PhotoLibrary, "Send photos and videos in HD", "Sharper and larger. Off sends a smaller copy that arrives faster; the preview before sending lets you choose for one send.", sendHd) { on -> app.prefs.setSendHd(on) }
     val nudgeButton by app.prefs.nudgeButton.collectAsState()
-    ToggleRow(Icons.Filled.WavingHand, "Nudge button", "A floating button in every chat to nudge with one tap. Off puts Nudge back in the paperclip menu.", nudgeButton) { on -> app.prefs.setNudgeButton(on) }
+    ToggleRow(Icons.Filled.WavingHand, "Nudge button", "A nudge button in the top bar of every chat. Off puts Nudge in the paperclip menu instead.", nudgeButton) { on -> app.prefs.setNudgeButton(on) }
 }
 
 @Composable
