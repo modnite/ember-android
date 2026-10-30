@@ -114,6 +114,7 @@ fun SettingsTab(nav: NavHostController) {
             ActionRow(Icons.Filled.DarkMode, "Appearance", "Theme, colours, chat wallpaper") { nav.navigate("settings/appearance") }
             ActionRow(Icons.Filled.Keyboard, "Chats and calls", "Enter key, photos, nudges, echo") { nav.navigate("settings/chats") }
             ActionRow(Icons.Filled.Search, "GIFs and stickers", "Search Giphy, Imgur and more") { nav.navigate("settings/online") }
+            ActionRow(Icons.Filled.Lock, "Two-step sign-in", "A code from an authenticator app at sign-in") { nav.navigate("settings/twostep") }
             ActionRow(Icons.Filled.Backup, "Backup and encryption", "Automatic backups, restore, your key") { nav.navigate("settings/backup") }
             UpdateRow()
 
@@ -153,6 +154,7 @@ fun SettingsPage(nav: NavHostController, page: String) {
         "appearance" -> "Appearance"
         "chats" -> "Chats and calls"
         "backup", "encryption" -> "Backup and encryption"
+        "twostep" -> "Two-step sign-in"
         "online" -> "GIFs and stickers"
         else -> "Settings"
     }
@@ -168,6 +170,7 @@ fun SettingsPage(nav: NavHostController, page: String) {
                 "appearance" -> AppearancePage()
                 "chats" -> ChatsPage()
                 "backup", "encryption" -> BackupRows()
+                "twostep" -> TwoStepRows()
                 "online" -> OnlineRows()
             }
             Spacer(Modifier.height(32.dp))

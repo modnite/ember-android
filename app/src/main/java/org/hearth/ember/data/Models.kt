@@ -195,3 +195,15 @@ data class ActiveCall(
     val startedAt: Long,
     val participants: List<String>,
 )
+
+@Serializable
+data class AuthConfig(val registration: String = "invite", val twoStep: Boolean = false)
+
+@Serializable
+data class TwoStepStatus(val enabled: Boolean = false, val recoveryLeft: Int = 0)
+
+@Serializable
+data class TwoStepSetup(val secret: String, val uri: String)
+
+@Serializable
+data class TwoStepRecovery(val recovery: List<String> = emptyList())

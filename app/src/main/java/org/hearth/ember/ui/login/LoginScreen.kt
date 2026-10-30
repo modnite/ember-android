@@ -72,21 +72,34 @@ fun LoginScreen() {
     var busy by remember { mutableStateOf(false) }
     var restoring by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    // Two-step sign-in: set when the server says this account needs the code from its authenticator app.
+    var code by remember { mutableStateOf("") }
+    var needsCode by remember { mutableStateOf(false) }
+    // The server lets anyone join without an invite code.
+    var openJoin by remember { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(server) {
+        openJoin = false
+        // Once the address looks finished (a pause in typing, with a dot or localhost in it), ask the server how joining works.
+        if (server.contains('.') || server.startsWith("localhost") || server.startsWith("http://")) {
+            runCatching { kotlinx.coroutines.delay(800); app.store.server = server; app.api.authConfig() }.onSuccess { openJoin = it.registration == "open" }
+        }
+    }
 
     fun submit() {
         if (busy) return
         error = null
         if (server.isBlank()) { error = "Enter your server address."; return }
         if (username.isBlank() || password.isEmpty()) { error = "Enter your username and password."; return }
-        if (joining && invite.isBlank()) { error = "Enter the invite code you were given."; return }
+        if (joining && invite.isBlank() && !openJoin) { error = "Enter the invite code you were given."; return }
         busy = true
         scope.launch {
             try {
                 if (joining) app.repo.register(server, invite, username, displayName.ifBlank { username }, password)
-                else app.repo.signIn(server, username, password)
+                else app.repo.signIn(server, username, password, if (needsCode) code.trim() else null)
                 // The password is in hand: put the backup key under it (a few seconds of work, in the background, for backups to use later).
                 app.scope.launch(kotlinx.coroutines.Dispatchers.Default) { runCatching { app.backup.adoptPassword(password, false) } }
             } catch (e: ApiException) {
+                if (e.message?.contains("two-step", ignoreCase = true) == true) needsCode = true
                 error = e.message
             } catch (e: Exception) {
                 error = "Something went wrong. Try again."
@@ -135,7 +148,7 @@ fun LoginScreen() {
             Spacer(Modifier.height(12.dp))
             if (joining) {
                 OutlinedTextField(
-                    value = invite, onValueChange = { invite = it }, label = { Text("Invite code") }, singleLine = true,
+                    value = invite, onValueChange = { invite = it }, label = { Text(if (openJoin) "Invite code (optional)" else "Invite code") }, singleLine = true,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next), modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(12.dp))
@@ -163,6 +176,16 @@ fun LoginScreen() {
                 },
                 modifier = Modifier.fillMaxWidth(),
             )
+            if (needsCode && !joining) {
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = code, onValueChange = { code = it }, label = { Text("Two-step code") }, singleLine = true,
+                    supportingText = { Text("From your authenticator app, or a recovery code") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { submit() }),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
             if (error != null) {
                 Spacer(Modifier.height(12.dp))
                 Text(error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
@@ -174,7 +197,7 @@ fun LoginScreen() {
             }
             Spacer(Modifier.height(8.dp))
             TextButton(onClick = { joining = !joining; error = null }) {
-                Text(if (joining) "I already have an account" else "I have an invite code")
+                Text(if (joining) "I already have an account" else if (openJoin) "Create an account" else "I have an invite code")
             }
             TextButton(onClick = { restoring = true }) { Text("Restore from a backup") }
             Spacer(Modifier.height(24.dp))

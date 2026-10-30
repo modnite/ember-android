@@ -116,9 +116,9 @@ class Repository(
         }
     }
 
-    suspend fun signIn(server: String, username: String, password: String) {
+    suspend fun signIn(server: String, username: String, password: String, code: String? = null) {
         store.server = server
-        val user = api.login(username.trim(), password)
+        val user = api.login(username.trim(), password, code)
         afterSignIn(user)
     }
 

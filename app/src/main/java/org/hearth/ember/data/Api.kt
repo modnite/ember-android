@@ -99,8 +99,16 @@ class Api(private val store: SessionStore, val client: OkHttpClient) {
     /** The key that seals this account's backups (the server makes it the first time it is asked for). */
     suspend fun backupKey(): BackupKeyResponse = get("/api/backup/key")
 
-    suspend fun login(username: String, password: String): User =
-        post<UserResponse>("/api/auth/login", buildJsonObject { put("username", username); put("password", password) }).user
+    suspend fun login(username: String, password: String, code: String? = null): User =
+        post<UserResponse>("/api/auth/login", buildJsonObject { put("username", username); put("password", password); if (!code.isNullOrBlank()) put("code", code) }).user
+
+    /** What the sign-in screen needs before anyone is signed in: whether the server lets anyone join without an invite code. */
+    suspend fun authConfig(): AuthConfig = get("/api/auth/config")
+
+    suspend fun twoStep(): TwoStepStatus = get("/api/auth/2fa")
+    suspend fun twoStepSetup(): TwoStepSetup = post("/api/auth/2fa/setup")
+    suspend fun twoStepEnable(code: String): TwoStepRecovery = post("/api/auth/2fa/enable", buildJsonObject { put("code", code) })
+    suspend fun twoStepDisable(password: String, code: String) { send("POST", "/api/auth/2fa/disable", buildJsonObject { put("password", password); put("code", code) }) }
 
     suspend fun register(invite: String, username: String, displayName: String, password: String): User =
         post<UserResponse>(
