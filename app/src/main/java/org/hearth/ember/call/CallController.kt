@@ -81,7 +81,13 @@ data class CallState(
     val error: String? = null,
     val preview: VideoTrack? = null,
     val screenOn: Boolean = false,
+    /** My own battery level while it is low in this call (null once I plug in). */
+    val lowBattery: Int? = null,
+    /** Others in the call whose battery is low, by identity. */
+    val peerBattery: Map<String, PeerBattery> = emptyMap(),
 )
+
+data class PeerBattery(val name: String, val level: Int)
 
 /**
  * The phone's call engine. It owns the LiveKit room, the camera (our own Camera2 source, so every lens works) and the audio route, and tells
@@ -95,6 +101,73 @@ class CallController(private val app: EmberApp) {
     /** Width over height of the picture the floating window will show, so the window takes that shape instead of cropping it. */
     val pipRatio = MutableStateFlow(9f / 16f)
     private val viewPrefs = app.getSharedPreferences("ember_call", Context.MODE_PRIVATE)
+
+    // ------------------------------------------------------------------ low battery
+    private var batteryWatch: BatteryWatch? = null
+    private val announcedSteps = mutableSetOf<Int>()
+    private var told = false
+    private var lastBattery: Pair<Int, Boolean>? = null
+
+    /** While in a call: watch the battery, warn me at 20, 15, 10 and 5 percent, and tell the others in the call. */
+    private fun startBattery() {
+        batteryWatch?.stop()
+        announcedSteps.clear()
+        told = false
+        batteryWatch = BatteryWatch(app) { level, charging -> onBattery(level, charging) }.also { it.start() }
+    }
+
+    private fun stopBattery() {
+        batteryWatch?.stop()
+        batteryWatch = null
+        announcedSteps.clear()
+        told = false
+        lastBattery = null
+        app.notifier.clearLowBattery()
+    }
+
+    private fun onBattery(level: Int, charging: Boolean) {
+        if (_state.value.phase != Phase.Connected || !app.prefs.lowBatteryAlerts.value) return
+        lastBattery = level to charging
+        val showing = _state.value.lowBattery != null
+        if ((charging || level > LowBattery.STEPS.first()) && showing) {
+            _state.update { it.copy(lowBattery = null) }
+            app.notifier.clearLowBattery()
+            if (told) tellBattery(level, charging)
+            told = false
+        }
+        if (LowBattery.crossed(level, charging, announcedSteps)) {
+            _state.update { it.copy(lowBattery = level) }
+            app.notifier.lowBattery(level)
+            buzz()
+            told = true
+            tellBattery(level, false)
+        }
+    }
+
+    private fun tellBattery(level: Int, charging: Boolean) {
+        val r = room ?: return
+        app.scope.launch { runCatching { r.localParticipant.publishData(LowBattery.encode(level, charging), topic = LowBattery.TOPIC) } }
+    }
+
+    private fun onPeerBattery(identity: String?, data: ByteArray) {
+        val (level, charging) = LowBattery.decode(data) ?: return
+        val id = identity ?: return
+        if (charging || level > LowBattery.STEPS.first()) {
+            _state.update { it.copy(peerBattery = it.peerBattery - id) }
+            return
+        }
+        val name = _state.value.people.firstOrNull { it.identity == id }?.name
+            ?: app.repo.users.value[id.substringBefore(':')]?.displayName ?: "Someone"
+        _state.update { it.copy(peerBattery = it.peerBattery + (id to PeerBattery(name, level))) }
+        buzz()
+    }
+
+    private fun buzz() = runCatching {
+        val vibrator = app.getSystemService(Context.VIBRATOR_SERVICE) as? android.os.Vibrator
+        val pattern = longArrayOf(0, 250, 120, 250)
+        if (Build.VERSION.SDK_INT >= 26) vibrator?.vibrate(android.os.VibrationEffect.createWaveform(pattern, -1))
+        else @Suppress("DEPRECATION") vibrator?.vibrate(pattern, -1)
+    }
 
     /** Where your own small picture sits, as a fraction of the room it has to move in (0,0 top left to 1,1 bottom right): free, and kept across turning the phone and across calls. */
     val selfPos = MutableStateFlow(androidx.compose.ui.geometry.Offset(viewPrefs.getFloat("selfX", 0.86f), viewPrefs.getFloat("selfY", 0.06f)))
@@ -374,6 +447,7 @@ class CallController(private val app: EmberApp) {
                 if (_state.value.camOn) publishCamera()
                 app.realtime.joinCall(roomId)
                 _state.update { it.copy(phase = Phase.Connected, startedAt = live?.startedAt ?: System.currentTimeMillis(), ringing = live == null) }
+                startBattery()
                 app.scope.launch { for (wait in listOf(2000L, 4000L, 8000L)) { delay(wait); if (room === r) checkRemoteAudio("after ${wait / 1000} s") } }
                 // Register with the system so headsets, watches and cars can mute and end it. The first mute report is just the starting
                 // state, so only a change after it counts.
@@ -453,6 +527,7 @@ class CallController(private val app: EmberApp) {
         val wasInCall = s.phase == Phase.Connected || s.phase == Phase.Connecting
         val roomId = s.roomId
         heartbeat?.cancel()
+        stopBattery()
         telecom.end()
         if (roomId != null && (s.phase == Phase.Connected || s.phase == Phase.Connecting)) app.realtime.leaveCall(roomId)
         stopCamera()
@@ -502,8 +577,17 @@ class CallController(private val app: EmberApp) {
                 hangup()
                 return
             }
-            is RoomEvent.TrackPublished, is RoomEvent.TrackSubscribed, is RoomEvent.TrackSubscriptionFailed, is RoomEvent.TrackUnsubscribed,
-            is RoomEvent.ParticipantConnected -> checkRemoteAudio(event.javaClass.simpleName)
+            is RoomEvent.TrackPublished, is RoomEvent.TrackSubscribed, is RoomEvent.TrackSubscriptionFailed, is RoomEvent.TrackUnsubscribed -> checkRemoteAudio(event.javaClass.simpleName)
+            is RoomEvent.ParticipantConnected -> {
+                checkRemoteAudio(event.javaClass.simpleName)
+                // Someone who joins late still hears that my battery is low.
+                if (told) lastBattery?.let { (level, charging) -> if (!charging) tellBattery(level, false) }
+            }
+            is RoomEvent.DataReceived -> if (event.topic == LowBattery.TOPIC) onPeerBattery(event.participant?.identity?.value, event.data)
+            is RoomEvent.ParticipantDisconnected -> {
+                val gone = event.participant.identity?.value
+                if (gone != null) _state.update { it.copy(peerBattery = it.peerBattery - gone) }
+            }
             else -> {}
         }
         rebuild()

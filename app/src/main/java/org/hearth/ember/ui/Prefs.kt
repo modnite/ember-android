@@ -104,6 +104,16 @@ class Prefs(context: Context) {
     val spellCheck: StateFlow<Boolean> = _spellCheck.asStateFlow()
     fun setSpellCheck(on: Boolean) { p.edit().putBoolean("spellCheck", on).apply(); _spellCheck.value = on }
 
+    /** In a call: warn me, and tell the others, when my battery falls to 20, 15, 10 and 5 percent. */
+    private val _lowBattery = MutableStateFlow(p.getBoolean("lowBatteryAlerts", true))
+    val lowBatteryAlerts: StateFlow<Boolean> = _lowBattery.asStateFlow()
+    fun setLowBatteryAlerts(on: Boolean) { p.edit().putBoolean("lowBatteryAlerts", on).apply(); _lowBattery.value = on }
+
+    /** Send crash reports to my Hearth server so they can be looked at and fixed. */
+    private val _crashReports = MutableStateFlow(p.getBoolean("crashReports", true))
+    val crashReports: StateFlow<Boolean> = _crashReports.asStateFlow()
+    fun setCrashReports(on: Boolean) { p.edit().putBoolean("crashReports", on).apply(); _crashReports.value = on }
+
     /** A small floating nudge button over the chat (the nudge is also in the paperclip menu). */
     private val _nudgeButton = MutableStateFlow(p.getBoolean("nudgeButton", true))
     val nudgeButton: StateFlow<Boolean> = _nudgeButton.asStateFlow()

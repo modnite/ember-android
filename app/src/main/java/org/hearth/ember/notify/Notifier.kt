@@ -98,6 +98,13 @@ class Notifier(private val context: Context) {
             },
         )
         system.createNotificationChannel(
+            NotificationChannel(CHANNEL_BATTERY, "Low battery in a call", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "Warns you while you are on a call and your battery is low"
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 300, 150, 300)
+            },
+        )
+        system.createNotificationChannel(
             NotificationChannel(CHANNEL_ONGOING, "Ongoing call", NotificationManager.IMPORTANCE_LOW).apply {
                 description = "Shown while you are on a call"
                 setShowBadge(false)
@@ -115,6 +122,25 @@ class Notifier(private val context: Context) {
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         return PendingIntent.getActivity(context, (roomId ?: "").hashCode(), intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     }
+
+    /** Your own battery is low during a call. It replaces itself at each new level and goes away when you plug in. */
+    fun lowBattery(level: Int) {
+        if (!allowed()) return
+        val notification = NotificationCompat.Builder(context, CHANNEL_BATTERY)
+            .setSmallIcon(R.drawable.ic_stat_ember)
+            .setContentTitle("Battery at $level%")
+            .setContentText("Plug in now and use a fast charger.")
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setContentIntent(PendingIntent.getActivity(context, 7311, Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
+            .setAutoCancel(true)
+            .setOnlyAlertOnce(false)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setColor(0xFFE8590C.toInt())
+            .build()
+        manager.notify(BATTERY_ID, notification)
+    }
+
+    fun clearLowBattery() = manager.cancel(BATTERY_ID)
 
     /** A nudge for a chat: a short strong buzz and a card that says who, with no sound. */
     fun nudge(payload: PushPayload) {
@@ -217,6 +243,8 @@ class Notifier(private val context: Context) {
         const val CHANNEL_CALLS = "calls"
         const val CHANNEL_SERVICE = "link"
         const val CHANNEL_NUDGES = "nudges"
+        const val CHANNEL_BATTERY = "battery"
+        const val BATTERY_ID = 7311
         const val CHANNEL_ONGOING = "ongoing"
         const val CHANNEL_UPDATES = "updates"
         const val GROUP = "ember_chats"

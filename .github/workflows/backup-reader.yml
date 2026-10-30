@@ -8,6 +8,8 @@ on:
       tag:
         description: Attach the packages to this existing release tag (for example v1.0.0)
         required: false
+permissions:
+  contents: write
 jobs:
   build:
     strategy:
