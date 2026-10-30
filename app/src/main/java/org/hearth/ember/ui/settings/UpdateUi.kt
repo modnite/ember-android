@@ -4,14 +4,19 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
 import android.widget.Toast
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -68,7 +73,7 @@ fun UpdateDialog(info: UpdateInfo, onClose: () -> Unit) {
             Column {
                 if (info.notes.isNotBlank()) Text(info.notes.take(600), style = MaterialTheme.typography.bodyMedium)
                 if (info.size > 0) Text("Download: ${"%.0f".format(info.size / 1048576.0)} MB", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
-                if (busy) LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth().padding(top = 12.dp))
+                if (busy) DownloadBar(progress, Modifier.padding(top = 12.dp))
             }
         },
         confirmButton = {
@@ -89,4 +94,16 @@ fun UpdateDialog(info: UpdateInfo, onClose: () -> Unit) {
         },
         dismissButton = { TextButton(enabled = !busy, onClick = onClose) { Text("Later") } },
     )
+}
+
+/** The download's progress: a plain rounded bar that fills from the left and ends where the download is, with nothing drawn past it (no end marker, no gap). */
+@Composable
+private fun DownloadBar(progress: Float, modifier: Modifier = Modifier) {
+    val p = progress.coerceIn(0f, 1f)
+    Column(modifier) {
+        Box(Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) {
+            Box(Modifier.fillMaxHeight().fillMaxWidth(p).background(MaterialTheme.colorScheme.primary))
+        }
+        Text("${(p * 100).toInt()}%", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
+    }
 }
