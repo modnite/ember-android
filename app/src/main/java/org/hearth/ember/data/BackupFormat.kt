@@ -16,7 +16,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
-class BackupException(message: String, val needsPassphrase: Boolean = false, val needsKey: Boolean = false) : Exception(message)
+class BackupException(message: String, val needsPassphrase: Boolean = false, val needsKey: Boolean = false, val needsPassword: Boolean = false) : Exception(message)
 
 /**
  * The backup file: a small JSON document. Ember seals every backup (version 2) with AES-256-GCM under the key that belongs to the account, which
@@ -34,12 +34,14 @@ object BackupFormat {
     private fun key(passphrase: String, salt: ByteArray) = deriveKey(passphrase, salt, ROUNDS)
 
     /** The version 2 file: [data] sealed under the account's own [key] (32 bytes), which says by [keyId] which key that was. */
-    fun sealKeyed(data: String, key: ByteArray, keyId: String): ByteArray {
+    fun sealKeyed(data: String, key: ByteArray, keyId: String, pw: JsonObject? = null): ByteArray {
         val nonce = ByteArray(12).also(SecureRandom()::nextBytes)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, SecretKeySpec(key, "AES"), GCMParameterSpec(128, nonce)) }
         // Compressed first (sealed data cannot be compressed afterwards): the settings and the stickers' text form shrink to about a third.
         return buildJsonObject {
-            put("ember_backup", 2); put("encrypted", true); put("keyed", true); put("keyId", keyId); put("gzip", true)
+            // Version 3 carries the key under the account password too (see PasswordWrap), so the password alone opens it.
+            put("ember_backup", if (pw != null) 3 else 2); put("encrypted", true); put("keyed", true); put("keyId", keyId); put("gzip", true)
+            if (pw != null) put("pw", pw)
             put("nonce", b64.encodeToString(nonce)); put("data", b64.encodeToString(cipher.doFinal(gzip(data.toByteArray()))))
         }.toString().toByteArray()
     }
@@ -47,6 +49,16 @@ object BackupFormat {
     fun gzip(bytes: ByteArray): ByteArray = java.io.ByteArrayOutputStream().also { out -> java.util.zip.GZIPOutputStream(out).use { it.write(bytes) } }.toByteArray()
 
     fun gunzip(bytes: ByteArray): ByteArray = java.util.zip.GZIPInputStream(bytes.inputStream()).use { it.readBytes() }
+
+    /** The format version a file says it is (1, 2 or 3). */
+    fun parseVersion(file: ByteArray): Int = parse(file)["ember_backup"]!!.jsonPrimitive.int
+
+    /** The password envelope of a version 3 file, or null. */
+    fun envelopeOf(file: ByteArray): JsonObject? = parse(file)["pw"] as? JsonObject
+
+    /** The key a version 3 file holds under [password]. */
+    fun unwrapFile(file: ByteArray, password: String): ByteArray =
+        PasswordWrap.unwrap(envelopeOf(file) ?: throw BackupException("This backup is not sealed under a password."), password)
 
     /** Which key sealed this file, or null for the older kinds. */
     fun keyIdOf(file: ByteArray): String? = parse(file)["keyId"]?.jsonPrimitive?.content
@@ -78,11 +90,20 @@ object BackupFormat {
     }
 
     /** The content, or a [BackupException] (asking for the passphrase, or saying it was wrong). */
-    fun open(file: ByteArray, passphrase: String?, key: ByteArray? = null, keyId: String? = null): String {
+    fun open(file: ByteArray, passphrase: String?, key: ByteArray? = null, keyId: String? = null, password: String? = null): String {
         val obj = parse(file)
         if (obj["encrypted"]?.jsonPrimitive?.boolean != true) return obj["data"]!!.jsonPrimitive.content
         if (obj["keyed"]?.jsonPrimitive?.boolean == true) {
-            if (key == null) throw BackupException("This backup is sealed with your account's key. Sign in first.", needsKey = true)
+            val envelope = obj["pw"] as? JsonObject
+            // A password opens a version 3 file by itself; otherwise the key this phone already holds (or the server gave) does, if it is the right one.
+            val own = if (envelope != null && !password.isNullOrEmpty()) PasswordWrap.unwrap(envelope, password) else null
+            val use = own ?: key
+            if (use == null) {
+                if (envelope != null) throw BackupException("This backup is sealed under your account password.", needsPassword = true)
+                throw BackupException("This backup is sealed with your account's key. Sign in first.", needsKey = true)
+            }
+            val key = use
+            val keyId = if (own != null) null else keyId
             val sealedWith = obj["keyId"]?.jsonPrimitive?.content
             if (keyId != null && sealedWith != null && keyId != sealedWith) throw BackupException("This backup belongs to another account, so this one cannot open it.")
             return try {

@@ -23,7 +23,7 @@ import kotlinx.serialization.json.long
 import kotlinx.serialization.json.put
 
 /** Why a file could not be opened. [needsKey] and [needsPassphrase] say what to ask for; [wrongAccount] means a key was given but it is not this file's. */
-class ReaderException(message: String, val needsKey: Boolean = false, val needsPassphrase: Boolean = false, val wrongAccount: Boolean = false) : Exception(message)
+class ReaderException(message: String, val needsKey: Boolean = false, val needsPassphrase: Boolean = false, val wrongAccount: Boolean = false, val needsPassword: Boolean = false) : Exception(message)
 
 /** What a key can be: made from an account (it carries the short fingerprint the server reports) or just pasted. */
 class AccountKey(val bytes: ByteArray, val id: String?) {
@@ -46,6 +46,40 @@ class AccountKey(val bytes: ByteArray, val id: String?) {
  * The two kinds of file Ember makes, read here. Nothing in this program can open a backup without the key of the account that made it: there is
  * no key built into the program, and the key is only ever given by that account's own server (after signing in) or typed by its owner.
  */
+/** The backup key held under the account password: Argon2id, then AES-256-GCM (the same format Ember writes; see Ember's PasswordWrap). */
+object PasswordWrap {
+    fun derive(password: String, salt: ByteArray, memoryKib: Int = 65_536, passes: Int = 3, lanes: Int = 1): ByteArray {
+        val g = org.bouncycastle.crypto.generators.Argon2BytesGenerator()
+        g.init(
+            org.bouncycastle.crypto.params.Argon2Parameters.Builder(org.bouncycastle.crypto.params.Argon2Parameters.ARGON2_id)
+                .withVersion(org.bouncycastle.crypto.params.Argon2Parameters.ARGON2_VERSION_13).withMemoryAsKB(memoryKib).withIterations(passes).withParallelism(lanes).withSalt(salt).build(),
+        )
+        return ByteArray(32).also { g.generateBytes(password.toByteArray(Charsets.UTF_8), it) }
+    }
+
+    fun wrap(key: ByteArray, password: String): JsonObject {
+        val rnd = SecureRandom()
+        val salt = ByteArray(16).also(rnd::nextBytes)
+        val nonce = ByteArray(12).also(rnd::nextBytes)
+        val sealed = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, SecretKeySpec(derive(password, salt), "AES"), GCMParameterSpec(128, nonce)) }.doFinal(key)
+        val e = Base64.getEncoder()
+        return buildJsonObject { put("kdf", "argon2id"); put("m", 65536); put("t", 3); put("p", 1); put("salt", e.encodeToString(salt)); put("nonce", e.encodeToString(nonce)); put("ct", e.encodeToString(sealed)) }
+    }
+
+    /** The key in an envelope, or a [ReaderException] saying the password was wrong. */
+    fun unwrap(envelope: JsonObject, password: String): AccountKey {
+        if (envelope["kdf"]?.jsonPrimitive?.content != "argon2id") throw ReaderException("This backup uses a password scheme this version does not know.")
+        val d = Base64.getDecoder()
+        return try {
+            val k = derive(password, d.decode(envelope["salt"]!!.jsonPrimitive.content), envelope["m"]!!.jsonPrimitive.int.coerceIn(8, 1 shl 20), envelope["t"]!!.jsonPrimitive.int.coerceIn(1, 20), envelope["p"]!!.jsonPrimitive.int.coerceIn(1, 8))
+            val key = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.DECRYPT_MODE, SecretKeySpec(k, "AES"), GCMParameterSpec(128, d.decode(envelope["nonce"]!!.jsonPrimitive.content))) }.doFinal(d.decode(envelope["ct"]!!.jsonPrimitive.content))
+            AccountKey(key, AccountKey.fingerprint(key))
+        } catch (e: Exception) {
+            throw ReaderException("That is not the password this backup was made under.", needsPassword = true)
+        }
+    }
+}
+
 object Format {
     private val json = Json { ignoreUnknownKeys = true }
     private val ub64 = Base64.getDecoder()
@@ -75,11 +109,17 @@ object Format {
         SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(PBEKeySpec(passphrase.toCharArray(), salt, rounds, 256)).encoded
 
     /** The backup's content (JSON text). */
-    fun openCore(file: ByteArray, key: AccountKey?, passphrase: String?): String {
+    fun openCore(file: ByteArray, key: AccountKey?, passphrase: String?, password: String? = null): String {
         val o = parse(file)
         if (o["encrypted"]?.jsonPrimitive?.boolean != true) return o["data"]!!.jsonPrimitive.content
         if (o["keyed"]?.jsonPrimitive?.boolean == true) {
-            if (key == null) throw ReaderException("This backup is sealed with its account's key.", needsKey = true)
+            val envelope = o["pw"] as? JsonObject
+            val own = if (envelope != null && !password.isNullOrEmpty()) PasswordWrap.unwrap(envelope, password) else null
+            val key = own ?: key
+            if (key == null) {
+                if (envelope != null) throw ReaderException("This backup is sealed under your account password.", needsPassword = true)
+                throw ReaderException("This backup is sealed with its account's key.", needsKey = true)
+            }
             val sealedWith = o["keyId"]?.jsonPrimitive?.contentOrNull
             if (sealedWith != null && key.id != null && key.id != sealedWith) throw ReaderException("This backup belongs to another account. That key cannot open it.", wrongAccount = true)
             return try {
@@ -135,10 +175,16 @@ object Format {
         return ArchiveInfo(h["encrypted"]?.jsonPrimitive?.boolean == true, h["keyed"]?.jsonPrimitive?.boolean == true, h["keyId"]?.jsonPrimitive?.contentOrNull, h)
     }
 
-    fun archiveCipher(info: ArchiveInfo, key: AccountKey?, passphrase: String?): ArchiveCipher {
+    fun archiveCipher(info: ArchiveInfo, key: AccountKey?, passphrase: String?, password: String? = null): ArchiveCipher {
         if (!info.encrypted) return ArchiveCipher(null)
         if (info.keyed) {
-            if (key == null) throw ReaderException("This archive is sealed with its account's key.", needsKey = true)
+            val envelope = info.header["pw"] as? JsonObject
+            val own = if (envelope != null && !password.isNullOrEmpty()) PasswordWrap.unwrap(envelope, password) else null
+            val key = own ?: key
+            if (key == null) {
+                if (envelope != null) throw ReaderException("This archive is sealed under your account password.", needsPassword = true)
+                throw ReaderException("This archive is sealed with its account's key.", needsKey = true)
+            }
             if (info.keyId != null && key.id != null && key.id != info.keyId) throw ReaderException("This archive belongs to another account. That key cannot open it.", wrongAccount = true)
             return ArchiveCipher(key.bytes)
         }
@@ -195,11 +241,11 @@ class OpenArchive(private val zip: ZipFile, private val cipher: Format.ArchiveCi
     override fun close() = zip.close()
 
     companion object {
-        fun open(file: File, key: AccountKey?, passphrase: String?): OpenArchive {
+        fun open(file: File, key: AccountKey?, passphrase: String?, password: String? = null): OpenArchive {
             val zip = ZipFile(file)
             return try {
                 val info = Format.archiveInfo(zip)
-                OpenArchive(zip, Format.archiveCipher(info, key, passphrase), info.header["compressed"]?.jsonPrimitive?.boolean == true)
+                OpenArchive(zip, Format.archiveCipher(info, key, passphrase, password), info.header["compressed"]?.jsonPrimitive?.boolean == true)
             } catch (e: Throwable) { zip.close(); throw e }
         }
     }

@@ -129,6 +129,23 @@ class FormatTest {
         }
     }
 
+    @Test fun argon2KnownAnswer() {
+        val salt = ByteArray(16) { it.toByte() }
+        val k = PasswordWrap.derive("correct horse", salt, memoryKib = 1024, passes = 2, lanes = 1)
+        // The same answer Ember's PasswordWrapTest expects: the two programs derive the same key from the same password.
+        assertEquals("77237b8a217dfd77699617e3893817f9fa215bff881849f3c007154da0b4788d", k.joinToString("") { "%02x".format(it) })
+    }
+
+    @Test fun aBackupSealedUnderThePasswordOpensWithItAndOnlyIt() {
+        val key = mine
+        val env = PasswordWrap.wrap(key.bytes, "hunter2 correct horse")
+        val file = Format.sealCore("""{"a":1}""", key).let { String(it) }.replace("\"gzip\":true", "\"gzip\":true,\"pw\":$env").toByteArray()
+        assertEquals("""{"a":1}""", Format.openCore(file, null, null, "hunter2 correct horse"))
+        assertTrue(assertFailsWith<ReaderException> { Format.openCore(file, null, null, "wrong") }.needsPassword)
+        assertTrue(assertFailsWith<ReaderException> { Format.openCore(file, null, null) }.needsPassword)
+        assertEquals("""{"a":1}""", Format.openCore(file, key, null)) // the key itself still opens it
+    }
+
     @Test fun serverAddressesAreTidied() {
         assertEquals("https://chat.example.com", Account.normalize("chat.example.com/"))
         assertEquals("https://chat.example.com", Account.normalize("http://chat.example.com"))

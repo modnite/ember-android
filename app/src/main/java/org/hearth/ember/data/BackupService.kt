@@ -48,13 +48,31 @@ class BackupService(private val app: EmberApp, private val context: Context) {
         }
     }
 
-    fun make(key: BackupKey): ByteArray = BackupFormat.sealKeyed(content(), key.bytes, key.id)
+    fun make(key: BackupKey): ByteArray = BackupFormat.sealKeyed(content(), key.bytes, key.id, envelopeFor(key))
+
+    /** The password envelope goes into a backup only when the key being used is the one it holds. */
+    private fun envelopeFor(key: BackupKey): JsonObject? = settings.envelope?.takeIf { settings.localKey()?.id == key.id }
+
+    /**
+     * Put the backup key under the account password: the phone makes its own random key if it has none, and seals it under [password] (Argon2id) so
+     * every backup carries it. With [verify], the password is first checked against the server, so a typo cannot lock backups.
+     */
+    suspend fun adoptPassword(password: String, verify: Boolean) = withContext(Dispatchers.Default) {
+        if (password.isEmpty()) throw BackupException("Enter your account password.")
+        if (verify) {
+            val username = app.repo.me.value?.username ?: throw BackupException("Sign in first.")
+            runCatching { app.api.login(username, password) }.getOrElse { throw BackupException("That is not your account password.") }
+        }
+        val key = settings.localKey() ?: BackupKey.of(ByteArray(32).also(java.security.SecureRandom()::nextBytes))
+        settings.setLocal(key, PasswordWrap.wrap(key.bytes, password))
+    }
 
     /**
      * The key that seals this account's backups. The server gives it to the signed-in owner and it is remembered here, so a scheduled backup
      * still runs when the server cannot be reached; with neither, there is no backup.
      */
     suspend fun key(): BackupKey {
+        settings.localKey()?.let { if (settings.envelope != null) return it }
         val owner = app.store.server + "|" + app.store.userId
         val fetched = runCatching { app.api.backupKey() }.getOrNull()
         if (fetched != null) {
@@ -66,9 +84,16 @@ class BackupService(private val app: EmberApp, private val context: Context) {
     }
 
     /** Put a backup back on this phone: the key first, then the settings and the stickers. Returns a short description of what was restored. */
-    suspend fun apply(file: ByteArray, passphrase: String?): String {
+    suspend fun apply(file: ByteArray, passphrase: String?, password: String? = null): String {
         val key = if (app.store.signedIn) runCatching { key() }.getOrNull() else null
-        val data = EmberJson.parseToJsonElement(BackupFormat.open(file, passphrase, key?.bytes, key?.id)).jsonObject
+        val data = EmberJson.parseToJsonElement(BackupFormat.open(file, passphrase, key?.bytes, key?.id, password)).jsonObject
+        // A backup that was opened with the password hands its key to this phone, so new backups are sealed under the same key and password.
+        if (!password.isNullOrEmpty() && BackupFormat.envelopeOf(file) != null) {
+            runCatching {
+                val k = BackupKey.of(BackupFormat.unwrapFile(file, password))
+                settings.setLocal(k, PasswordWrap.wrap(k.bytes, password))
+            }
+        }
         val secret = data["e2eeSecret"]?.jsonPrimitive?.content.orEmpty()
         if (secret.isNotEmpty()) app.store.e2eeSecret = secret
         (data["settings"] as? JsonObject)?.let { app.prefs.restore(it) }
@@ -109,7 +134,7 @@ class BackupService(private val app: EmberApp, private val context: Context) {
             val stamp = archiveStamp()
             val unchanged = settings.includeHistory && stamp == settings.archiveStamp && stamp.isNotEmpty() && settings.lastRuns.values.all { it.ok }
             val archive = if (settings.includeHistory && !unchanged) File(dir, BackupNames.archive(now)).also {
-                HistoryArchive(app).build(it, ArchiveCipher.keyed(key.bytes, key.id), settings.includeMedia, progress)
+                HistoryArchive(app).build(it, ArchiveCipher.keyed(key.bytes, key.id, envelopeFor(key)), settings.includeMedia, progress)
             } else null
             val results = destinations.map { d ->
                 val run = runCatching {
@@ -151,11 +176,11 @@ class BackupService(private val app: EmberApp, private val context: Context) {
         target(d).list().filter { BackupNames.isCore(it.name) }.sortedByDescending { it.name }
     }
 
-    suspend fun restoreFrom(d: Destination, name: String, passphrase: String?): String {
+    suspend fun restoreFrom(d: Destination, name: String, passphrase: String?, password: String? = null): String {
         val bytes = withContext(Dispatchers.IO) {
             val file = File(workDir(), name)
             try { target(d).get(name, file); file.readBytes() } finally { file.delete() }
         }
-        return apply(bytes, passphrase)
+        return apply(bytes, passphrase, password)
     }
 }

@@ -90,7 +90,7 @@ private fun Surface(content: @Composable () -> Unit) {
 /** What is open right now. */
 private sealed interface Open {
     data object Nothing : Open
-    class Locked(val file: File, val keyId: String?, val why: String, val askPassphrase: Boolean) : Open
+    class Locked(val file: File, val keyId: String?, val why: String, val askPassphrase: Boolean, val askPassword: Boolean = false) : Open
     class Core(val file: File, val content: String) : Open
     class Archive(val file: File, val archive: OpenArchive) : Open
 }
@@ -121,23 +121,23 @@ private fun Reader(initial: File?) {
     var problem by remember { mutableStateOf<String?>(null) }
 
     /** Opens [file] with what is known: a key (from signing in or pasted) and, for old backups, a passphrase. */
-    fun load(file: File, passphrase: String? = null) {
+    fun load(file: File, passphrase: String? = null, password: String? = null) {
         scope.launch {
             busy = true; problem = null
             try {
                 open = withContext(Dispatchers.IO) {
                     if (file.extension.equals("zip", true)) {
-                        Open.Archive(file, OpenArchive.open(file, key, passphrase))
+                        Open.Archive(file, OpenArchive.open(file, key, passphrase, password))
                     } else {
                         val bytes = file.readBytes()
-                        Open.Core(file, Format.openCore(bytes, key, passphrase))
+                        Open.Core(file, Format.openCore(bytes, key, passphrase, password))
                     }
                 }
             } catch (e: ReaderException) {
-                if (e.needsKey || e.needsPassphrase || e.wrongAccount) {
+                if (e.needsKey || e.needsPassphrase || e.needsPassword || e.wrongAccount) {
                     val keyId = runCatching { if (file.extension.equals("zip", true)) java.util.zip.ZipFile(file).use { Format.archiveInfo(it).keyId } else Format.info(file.readBytes()).keyId }.getOrNull()
-                    open = Open.Locked(file, keyId, e.message ?: "", e.needsPassphrase)
-                    problem = if (e.wrongAccount) e.message else null
+                    open = Open.Locked(file, keyId, e.message ?: "", e.needsPassphrase, e.needsPassword)
+                    problem = if (e.wrongAccount || (e.needsPassword && password != null)) e.message else null
                 } else { open = Open.Nothing; problem = e.message }
             } catch (e: Exception) {
                 open = Open.Nothing; problem = "That file could not be read: ${e.message}"
@@ -159,7 +159,7 @@ private fun Reader(initial: File?) {
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (val o = open) {
                 Open.Nothing -> Welcome(problem, busy) { f -> load(f) }
-                is Open.Locked -> Unlock(o, key, busy, problem, onKey = { k -> key = k; problem = null; load(o.file) }, onPassphrase = { p -> load(o.file, p) })
+                is Open.Locked -> Unlock(o, key, busy, problem, onKey = { k -> key = k; problem = null; load(o.file) }, onPassphrase = { p -> load(o.file, p) }, onPassword = { p -> load(o.file, null, p) })
                 is Open.Core -> CoreView(o)
                 is Open.Archive -> ArchiveView(o.archive)
             }
@@ -187,9 +187,10 @@ private fun Welcome(problem: String?, busy: Boolean, onFile: (File) -> Unit) {
 }
 
 @Composable
-private fun Unlock(o: Open.Locked, key: AccountKey?, busy: Boolean, problem: String?, onKey: (AccountKey) -> Unit, onPassphrase: (String) -> Unit) {
+private fun Unlock(o: Open.Locked, key: AccountKey?, busy: Boolean, problem: String?, onKey: (AccountKey) -> Unit, onPassphrase: (String) -> Unit, onPassword: (String) -> Unit) {
     val scope = rememberCoroutineScope()
-    var tab by remember { mutableStateOf(if (o.askPassphrase) 2 else 0) }
+    var tab by remember { mutableStateOf(if (o.askPassphrase) 2 else if (o.askPassword) 3 else 0) }
+    var accountPassword by remember { mutableStateOf("") }
     var server by remember { mutableStateOf("") }
     var user by remember { mutableStateOf("") }
     var pass by remember { mutableStateOf("") }
@@ -210,6 +211,7 @@ private fun Unlock(o: Open.Locked, key: AccountKey?, busy: Boolean, problem: Str
                     Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Sign in") })
                     Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Backup key") })
                     Tab(selected = tab == 2, onClick = { tab = 2 }, text = { Text("Old passphrase") })
+                    Tab(selected = tab == 3, onClick = { tab = 3 }, text = { Text("Password") })
                 }
                 when (tab) {
                     0 -> {
@@ -229,6 +231,11 @@ private fun Unlock(o: Open.Locked, key: AccountKey?, busy: Boolean, problem: Str
                         OutlinedTextField(recovery, { recovery = it }, singleLine = true, label = { Text("Backup key") }, placeholder = { Text("shown in Ember: Settings, Backup and restore, Backup key") }, modifier = Modifier.fillMaxWidth())
                         Text("Use this when your server is not reachable. Anyone with the key and the file can read the backup, so keep the key private.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Button(enabled = recovery.isNotBlank() && !busy, onClick = { runCatching { AccountKey.parse(recovery) }.onSuccess { error = null; onKey(it) }.onFailure { error = it.message } }) { Text("Open") }
+                    }
+                    3 -> {
+                        OutlinedTextField(accountPassword, { accountPassword = it }, singleLine = true, label = { Text("Your account password") }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+                        Text("Newer backups are sealed under your Hearth account password. It is used here only to open this file: nothing is sent anywhere.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Button(enabled = accountPassword.isNotEmpty() && !busy, onClick = { onPassword(accountPassword) }) { Text("Open") }
                     }
                     else -> {
                         OutlinedTextField(passphrase, { passphrase = it }, singleLine = true, label = { Text("Passphrase") }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())

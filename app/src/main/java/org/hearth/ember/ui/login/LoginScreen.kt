@@ -84,6 +84,8 @@ fun LoginScreen() {
             try {
                 if (joining) app.repo.register(server, invite, username, displayName.ifBlank { username }, password)
                 else app.repo.signIn(server, username, password)
+                // The password is in hand: put the backup key under it (a few seconds of work, in the background, for backups to use later).
+                app.scope.launch(kotlinx.coroutines.Dispatchers.Default) { runCatching { app.backup.adoptPassword(password, false) } }
             } catch (e: ApiException) {
                 error = e.message
             } catch (e: Exception) {

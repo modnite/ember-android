@@ -79,6 +79,7 @@ private sealed interface Dlg {
     class Key(val text: String, val id: String) : Dlg
     class RestoreList(val dest: Destination, val entries: List<RemoteEntry>) : Dlg
     class AskPassphrase(val then: (String) -> Unit) : Dlg
+    class AskPassword(val then: (String) -> Unit) : Dlg
 }
 
 private fun whenOf(e: RemoteEntry): String {
@@ -156,20 +157,22 @@ fun BackupRows() {
     }
 
     /** Restore from a file's bytes; an old passphrase-sealed one asks for its passphrase. */
-    fun restoreBytes(bytes: ByteArray, passphrase: String?) {
+    fun restoreBytes(bytes: ByteArray, passphrase: String?, password: String? = null) {
         scope.launch {
             progress = "Restoring…"
-            runCatching { app.backup.apply(bytes, passphrase) }.onSuccess { say(it) }.onFailure { e ->
-                if (e is BackupException && e.needsPassphrase) dialog = Dlg.AskPassphrase { p -> restoreBytes(bytes, p) } else problem(e)
+            runCatching { app.backup.apply(bytes, passphrase, password) }.onSuccess { say(it) }.onFailure { e ->
+                if (e is BackupException && e.needsPassword) dialog = Dlg.AskPassword { p -> restoreBytes(bytes, passphrase, p) }
+                else if (e is BackupException && e.needsPassphrase) dialog = Dlg.AskPassphrase { p -> restoreBytes(bytes, p) } else problem(e)
             }
             progress = null
         }
     }
-    fun restoreEntry(d: Destination, name: String, passphrase: String?) {
+    fun restoreEntry(d: Destination, name: String, passphrase: String?, password: String? = null) {
         scope.launch {
             progress = "Restoring…"
-            runCatching { app.backup.restoreFrom(d, name, passphrase) }.onSuccess { say(it) }.onFailure { e ->
-                if (e is BackupException && e.needsPassphrase) dialog = Dlg.AskPassphrase { p -> restoreEntry(d, name, p) } else problem(e)
+            runCatching { app.backup.restoreFrom(d, name, passphrase, password) }.onSuccess { say(it) }.onFailure { e ->
+                if (e is BackupException && e.needsPassword) dialog = Dlg.AskPassword { p -> restoreEntry(d, name, passphrase, p) }
+                else if (e is BackupException && e.needsPassphrase) dialog = Dlg.AskPassphrase { p -> restoreEntry(d, name, p) } else problem(e)
             }
             progress = null
         }
@@ -359,6 +362,18 @@ fun BackupRows() {
             },
             confirmButton = { TextButton(onClick = { dialog = null }) { Text("Cancel") } },
         )
+        is Dlg.AskPassword -> AlertDialog(
+            onDismissRequest = { dialog = null; pass = "" },
+            title = { Text("Your account password") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("This backup is sealed under the password of the account that made it. It is only used to open the backup.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    OutlinedTextField(pass, { pass = it }, singleLine = true, label = { Text("Password") }, visualTransformation = PasswordVisualTransformation())
+                }
+            },
+            confirmButton = { TextButton(enabled = pass.isNotEmpty(), onClick = { val p = pass; pass = ""; dialog = null; d.then(p) }) { Text("Restore") } },
+            dismissButton = { TextButton(onClick = { dialog = null; pass = "" }) { Text("Cancel") } },
+        )
         is Dlg.AskPassphrase -> AlertDialog(
             onDismissRequest = { dialog = null; pass = "" },
             title = { Text("An older backup, sealed with a passphrase") },
@@ -421,11 +436,11 @@ fun RestoreOnSignIn(server: String, username: String, password: String, onClose:
             busy = false
         }
     }
-    fun fromBytes(bytes: ByteArray, p: String?) { run({ app.backup.apply(bytes, p) }) { fromBytes(bytes, it) } }
+    fun fromBytes(bytes: ByteArray, p: String?) { run({ app.backup.apply(bytes, p, password) }) { fromBytes(bytes, it) } }
     fun fromServer(d: Destination, p: String?) {
         run({
             val newest = app.backup.backupsIn(d).firstOrNull() ?: throw BackupException("No Ember backup found in that folder.")
-            app.backup.restoreFrom(d, newest.name, p)
+            app.backup.restoreFrom(d, newest.name, p, password)
         }) { fromServer(d, it) }
     }
     val openFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->

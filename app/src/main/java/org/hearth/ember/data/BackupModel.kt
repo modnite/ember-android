@@ -43,6 +43,11 @@ data class Destination(val id: String, val kind: String, val label: String, val 
 
 /** The key that seals an account's backups: 32 bytes and a short fingerprint saying which key it is. */
 class BackupKey(val bytes: ByteArray, val id: String) {
+    companion object {
+        /** The fingerprint is the first four bytes of the key's SHA-256, in hex (the same the server reports). */
+        fun of(bytes: ByteArray) = BackupKey(bytes, java.security.MessageDigest.getInstance("SHA-256").digest(bytes).take(4).joinToString("") { "%02x".format(it) })
+    }
+
     /** The key as text, to keep somewhere safe or to give the desktop reader. */
     val text: String get() = java.util.Base64.getEncoder().withoutPadding().encodeToString(bytes)
 }
@@ -78,7 +83,7 @@ object BackupNames {
  * Seals the files inside a history archive one by one (AES-256-GCM, a fresh nonce each), under one key made from the passphrase, so a large
  * archive never has to sit in memory whole. Without a passphrase the files are kept as they are.
  */
-class ArchiveCipher private constructor(private val key: SecretKeySpec?, private val salt: ByteArray?, private val keyId: String? = null) {
+class ArchiveCipher private constructor(private val key: SecretKeySpec?, private val salt: ByteArray?, private val keyId: String? = null, private val pw: JsonObject? = null) {
     val encrypted get() = key != null
 
     /** What goes in the archive's plain header, so the passphrase can be checked later. */
@@ -87,6 +92,7 @@ class ArchiveCipher private constructor(private val key: SecretKeySpec?, private
         put("encrypted", encrypted)
         if (salt != null) { put("rounds", BackupFormat.ROUNDS); put("salt", java.util.Base64.getEncoder().encodeToString(salt)) }
         if (keyId != null) { put("keyed", true); put("keyId", keyId) }
+        if (pw != null) put("pw", pw)
         // chats.json (and text files, named media/<id>.gz) are compressed before they are sealed.
         put("compressed", true)
     }
@@ -109,18 +115,23 @@ class ArchiveCipher private constructor(private val key: SecretKeySpec?, private
         fun plain() = ArchiveCipher(null, null)
 
         /** Sealed under the account's own key (see [BackupFormat]): no passphrase. */
-        fun keyed(key: ByteArray, keyId: String) = ArchiveCipher(SecretKeySpec(key, "AES"), null, keyId)
+        fun keyed(key: ByteArray, keyId: String, pw: JsonObject? = null) = ArchiveCipher(SecretKeySpec(key, "AES"), null, keyId, pw)
 
         fun create(passphrase: String): ArchiveCipher {
             val salt = ByteArray(16).also(SecureRandom()::nextBytes)
             return ArchiveCipher(BackupFormat.deriveKey(passphrase, salt, BackupFormat.ROUNDS), salt)
         }
 
-        fun from(header: JsonObject, passphrase: String?, key: ByteArray? = null): ArchiveCipher {
+        fun from(header: JsonObject, passphrase: String?, key: ByteArray? = null, password: String? = null): ArchiveCipher {
             if (header["encrypted"]?.jsonPrimitive?.boolean != true) return plain()
             if (header["keyed"]?.jsonPrimitive?.boolean == true) {
-                if (key == null) throw BackupException("This archive is sealed with your account's key. Sign in first.", needsKey = true)
-                return ArchiveCipher(SecretKeySpec(key, "AES"), null, header["keyId"]?.jsonPrimitive?.content)
+                val envelope = header["pw"] as? JsonObject
+                val use = if (envelope != null && !password.isNullOrEmpty()) PasswordWrap.unwrap(envelope, password) else key
+                if (use == null) {
+                    if (envelope != null) throw BackupException("This archive is sealed under your account password.", needsPassword = true)
+                    throw BackupException("This archive is sealed with your account's key. Sign in first.", needsKey = true)
+                }
+                return ArchiveCipher(SecretKeySpec(use, "AES"), null, header["keyId"]?.jsonPrimitive?.content)
             }
             if (passphrase.isNullOrEmpty()) throw BackupException("This archive is encrypted.", needsPassphrase = true)
             val salt = java.util.Base64.getDecoder().decode(header["salt"]!!.jsonPrimitive.content)
@@ -157,6 +168,20 @@ class BackupSettings(context: Context) {
     var atMinute: Int
         get() = prefs.getInt("atMinute", 3 * 60).coerceIn(0, 24 * 60 - 1)
         set(v) { prefs.edit().putInt("atMinute", v.coerceIn(0, 24 * 60 - 1)).apply(); changed() }
+
+    /** The key this phone made for its own backups (see PasswordWrap), and the envelope that holds it under the account password. Both stay here. */
+    fun localKey(): BackupKey? {
+        val b64 = prefs.getString("localKey", null) ?: return null
+        return runCatching { BackupKey.of(java.util.Base64.getDecoder().decode(b64)) }.getOrNull()
+    }
+
+    val envelope: JsonObject?
+        get() = prefs.getString("envelope", null)?.let { runCatching { EmberJson.parseToJsonElement(it) as? JsonObject }.getOrNull() }
+
+    fun setLocal(key: BackupKey, envelope: JsonObject) {
+        prefs.edit().putString("localKey", java.util.Base64.getEncoder().encodeToString(key.bytes)).putString("envelope", envelope.toString()).apply()
+        changed()
+    }
 
     /** The account's backup key, as last fetched from the server, with who it belongs to ("server|user"), so a backup can run without the server. */
     fun cachedKey(owner: String): BackupKey? {

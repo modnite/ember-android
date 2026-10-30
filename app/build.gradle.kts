@@ -15,8 +15,8 @@ android {
         applicationId = "org.hearth.ember"
         minSdk = 26
         targetSdk = 35
-        versionCode = 24
-        versionName = "0.5.1"
+        versionCode = 25
+        versionName = "0.6.0"
         // Where Ember looks for newer versions of itself.
         buildConfigField("String", "UPDATE_REPO", "\"modnite/ember-android\"")
     }
@@ -79,6 +79,7 @@ dependencies {
     implementation("io.livekit:livekit-android:2.23.0")
     implementation("androidx.core:core-telecom:1.0.0")
     implementation("com.google.crypto.tink:tink-android:1.15.0")
+    implementation("org.bouncycastle:bcprov-jdk18on:1.78.1") // Argon2id for the backup password (PasswordWrap)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
