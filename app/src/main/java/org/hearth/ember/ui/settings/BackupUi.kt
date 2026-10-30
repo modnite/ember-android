@@ -130,21 +130,39 @@ fun BackupRows() {
     var davPass by remember { mutableStateOf("") }
     var label by remember { mutableStateOf("") }
     var turningOn by remember { mutableStateOf(false) }
-    val busy = progress != null
+    // A backup runs in the background (foreground job with a notification), not in this page: leaving the page changes nothing, and it
+    // stops only when cancelled here or from its notification. This page just watches it.
+    val work by BackupScheduler.state(context).collectAsState(initial = null)
+    val backingUp = work?.state?.let { it == androidx.work.WorkInfo.State.RUNNING || it == androidx.work.WorkInfo.State.ENQUEUED || it == androidx.work.WorkInfo.State.BLOCKED } == true
+    val busy = progress != null || backingUp
+    var wasBackingUp by remember { mutableStateOf(false) }
 
     fun say(text: String) = Toast.makeText(context, text, Toast.LENGTH_LONG).show()
     fun problem(e: Throwable) = say(e.message ?: "Something went wrong.")
     fun reschedule() = BackupScheduler.apply(context, settings)
 
     fun backUpNow() {
-        scope.launch {
-            progress = "Starting…"
-            runCatching { app.backup.runNow { progress = it } }.onSuccess { results ->
-                val failed = results.filter { !it.second.ok }
-                say(if (failed.isEmpty()) "Backed up to ${results.size} ${if (results.size == 1) "place" else "places"}." else failed.joinToString("\n") { "${it.first.label}: ${it.second.message}" })
-            }.onFailure { problem(it) }
-            progress = null
+        BackupScheduler.runNow(context)
+        say("Backing up in the background. You can leave this page.")
+    }
+
+    // Tell what happened when a backup that was running while this page was open ends.
+    androidx.compose.runtime.LaunchedEffect(backingUp, work?.state) {
+        if (wasBackingUp && !backingUp) {
+            val info = work
+            when (info?.state) {
+                androidx.work.WorkInfo.State.CANCELLED -> say("Backup cancelled.")
+                androidx.work.WorkInfo.State.SUCCEEDED -> {
+                    val error = info.outputData.getString("error")
+                    val failed = info.outputData.getString("failed").orEmpty()
+                    val places = info.outputData.getInt("places", 0)
+                    say(error ?: if (failed.isEmpty()) "Backed up to $places ${if (places == 1) "place" else "places"}." else failed)
+                }
+                androidx.work.WorkInfo.State.FAILED -> say("The backup failed.")
+                else -> {}
+            }
         }
+        wasBackingUp = backingUp
     }
 
     val addFolder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri: Uri? ->
@@ -160,7 +178,7 @@ fun BackupRows() {
 
     /** Restore from a file's bytes; an old passphrase-sealed one asks for its passphrase. */
     fun restoreBytes(bytes: ByteArray, passphrase: String?, password: String? = null) {
-        scope.launch {
+        app.scope.launch {
             progress = "Restoring…"
             runCatching { app.backup.apply(bytes, passphrase, password) }.onSuccess { say(it) }.onFailure { e ->
                 if (e is BackupException && e.needsPassword) dialog = Dlg.AskPassword { p -> restoreBytes(bytes, passphrase, p) }
@@ -170,7 +188,7 @@ fun BackupRows() {
         }
     }
     fun restoreEntry(d: Destination, name: String, passphrase: String?, password: String? = null) {
-        scope.launch {
+        app.scope.launch {
             progress = "Restoring…"
             runCatching { app.backup.restoreFrom(d, name, passphrase, password) }.onSuccess { say(it) }.onFailure { e ->
                 if (e is BackupException && e.needsPassword) dialog = Dlg.AskPassword { p -> restoreEntry(d, name, passphrase, p) }
@@ -200,7 +218,15 @@ fun BackupRows() {
     ActionRow(Icons.Filled.Backup, "Back up now", if (settings.destinations.isEmpty()) "Add a place first" else lastSummary(settings.destinations.size, settings.lastRuns.values.maxOfOrNull { it.at }, revision)) {
         if (settings.destinations.isEmpty()) say("Add a place to keep backups first.") else if (!busy) backUpNow()
     }
-    progress?.let {
+    if (backingUp) {
+        val text = work?.progress?.getString("text") ?: if (work?.state == androidx.work.WorkInfo.State.ENQUEUED) "Waiting for a connection…" else "Starting…"
+        Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 56.dp, end = 20.dp))
+        LinearProgressIndicator(Modifier.fillMaxWidth().padding(start = 56.dp, end = 20.dp, top = 6.dp, bottom = 6.dp))
+        Row(Modifier.fillMaxWidth().padding(start = 48.dp, end = 20.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("It keeps going if you leave this page or close the app.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f).padding(start = 8.dp))
+            TextButton(onClick = { BackupScheduler.cancelNow(context) }) { Text("Cancel backup") }
+        }
+    } else progress?.let {
         Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 56.dp, end = 20.dp))
         LinearProgressIndicator(Modifier.fillMaxWidth().padding(start = 56.dp, end = 20.dp, top = 6.dp, bottom = 6.dp))
     }

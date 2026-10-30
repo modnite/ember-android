@@ -234,13 +234,22 @@ private fun EmberRoot(pendingRoom: androidx.compose.runtime.MutableState<String?
     val backEntry by nav.currentBackStackEntryAsState()
     val onCallScreen = backEntry?.destination?.route?.startsWith("call/") == true
     val ongoing = callState.phase == org.hearth.ember.call.Phase.Connected || callState.phase == org.hearth.ember.call.Phase.Connecting
+    val backupActivity by org.hearth.ember.ui.settings.rememberBackupActivity()
+    val callBarShown = ongoing && !pip && !onCallScreen && callState.roomId != null
+    // The backup page shows the same thing itself, with more detail, so the strip is for every other screen.
+    val onBackupPage = backEntry?.destination?.route == "settings/{page}" && backEntry?.arguments?.getString("page") == "backup"
+    val activityShown = backupActivity != null && !pip && !onCallScreen && !onBackupPage
     androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.fillMaxSize()) {
-        if (ongoing && !pip && !onCallScreen && callState.roomId != null) {
+        if (callBarShown) {
             org.hearth.ember.call.CallReturnBar(callState) { nav.navigate("call/${callState.roomId}") { launchSingleTop = true } }
+        }
+        // A backup or restore going on: one strip over every screen says what it is doing; tapping opens the backup page.
+        backupActivity?.let { a ->
+            if (activityShown) org.hearth.ember.ui.settings.BackupActivityBar(a, padStatusBar = !callBarShown) { nav.navigate("settings/backup") { launchSingleTop = true } }
         }
         androidx.compose.foundation.layout.Box(
             androidx.compose.ui.Modifier.weight(1f).fillMaxWidth()
-                .then(if (ongoing && !pip && !onCallScreen) androidx.compose.ui.Modifier.consumeWindowInsets(androidx.compose.foundation.layout.WindowInsets.statusBars) else androidx.compose.ui.Modifier),
+                .then(if ((ongoing && !pip && !onCallScreen) || activityShown) androidx.compose.ui.Modifier.consumeWindowInsets(androidx.compose.foundation.layout.WindowInsets.statusBars) else androidx.compose.ui.Modifier),
         ) {
             EmberNav(nav)
             // The other person's picture stays on screen over the rest of the app while a call goes on.

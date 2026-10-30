@@ -1,5 +1,8 @@
 package org.hearth.ember.data
 
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.currentCoroutineContext
 import android.content.Context
 import android.net.Uri
 import android.util.Base64
@@ -84,7 +87,16 @@ class BackupService(private val app: EmberApp, private val context: Context) {
     }
 
     /** Put a backup back on this phone: the key first, then the settings and the stickers. Returns a short description of what was restored. */
+    /** What a restore is doing right now, or null; every screen's activity bar shows it. */
+    private val _restoring = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+    val restoring: kotlinx.coroutines.flow.StateFlow<String?> = _restoring
+
     suspend fun apply(file: ByteArray, passphrase: String?, password: String? = null): String {
+        _restoring.value = "Restoring your settings and keys\u2026"
+        try { return applyInner(file, passphrase, password) } finally { _restoring.value = null }
+    }
+
+    private suspend fun applyInner(file: ByteArray, passphrase: String?, password: String?): String {
         val key = if (app.store.signedIn) runCatching { key() }.getOrNull() else null
         val data = EmberJson.parseToJsonElement(BackupFormat.open(file, passphrase, key?.bytes, key?.id, password)).jsonObject
         // A backup that was opened with the password hands its key to this phone, so new backups are sealed under the same key and password.
@@ -121,7 +133,7 @@ class BackupService(private val app: EmberApp, private val context: Context) {
     private fun workDir() = File(context.cacheDir, "backups").also { it.mkdirs(); it.listFiles()?.forEach { f -> f.delete() } }
 
     /** Back up now to every destination. One destination failing does not stop the others; each gets its own result, remembered for the settings page. */
-    suspend fun runNow(progress: (String) -> Unit = {}): List<Pair<Destination, BackupRun>> = withContext(Dispatchers.IO) {
+    suspend fun runNow(progress: (String) -> Unit = {}): List<Pair<Destination, BackupRun>> = runLock.withLock { withContext(Dispatchers.IO) {
         val destinations = settings.destinations
         if (destinations.isEmpty()) throw BackupException("Add a place to back up to first.")
         val key = key()
@@ -137,6 +149,7 @@ class BackupService(private val app: EmberApp, private val context: Context) {
                 HistoryArchive(app).build(it, ArchiveCipher.keyed(key.bytes, key.id, envelopeFor(key)), settings.includeMedia, progress)
             } else null
             val results = destinations.map { d ->
+                currentCoroutineContext().ensureActive()
                 val run = runCatching {
                     progress("Saving to ${d.label}…")
                     val t = target(d)
@@ -144,7 +157,7 @@ class BackupService(private val app: EmberApp, private val context: Context) {
                     archive?.let { t.put(it.name, it) }
                     prune(t)
                     BackupRun(now, true, if (unchanged) "Backed up (chats unchanged)" else "Backed up", core.length() + (archive?.length() ?: 0L))
-                }.getOrElse { BackupRun(now, false, it.message ?: "The backup failed.") }
+                }.getOrElse { if (it is kotlinx.coroutines.CancellationException) throw it; BackupRun(now, false, it.message ?: "The backup failed.") }
                 settings.record(d.id, run)
                 d to run
             }
@@ -153,7 +166,10 @@ class BackupService(private val app: EmberApp, private val context: Context) {
         } finally {
             dir.listFiles()?.forEach { it.delete() }
         }
-    }
+    } }
+
+    /** Two backups at once would share one working folder: a second waits for the first. */
+    private val runLock = kotlinx.coroutines.sync.Mutex()
 
     /** A fingerprint of the chats: each one's newest message, the week, and whether files are included. A change of any of them means a new archive. */
     internal fun archiveStamp(): String {
@@ -177,10 +193,13 @@ class BackupService(private val app: EmberApp, private val context: Context) {
     }
 
     suspend fun restoreFrom(d: Destination, name: String, passphrase: String?, password: String? = null): String {
-        val bytes = withContext(Dispatchers.IO) {
-            val file = File(workDir(), name)
-            try { target(d).get(name, file); file.readBytes() } finally { file.delete() }
-        }
-        return apply(bytes, passphrase, password)
+        _restoring.value = "Reading the backup from ${d.label}\u2026"
+        try {
+            val bytes = withContext(Dispatchers.IO) {
+                val file = File(workDir(), name)
+                try { target(d).get(name, file); file.readBytes() } finally { file.delete() }
+            }
+            return apply(bytes, passphrase, password)
+        } finally { _restoring.value = null }
     }
 }
