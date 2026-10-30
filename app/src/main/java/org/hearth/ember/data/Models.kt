@@ -85,6 +85,8 @@ data class Room(
     val members: List<User> = emptyList(),
     val lastMessage: Message? = null,
     val unread: Int = 0,
+    /** Archived by me: out of the main list and quiet, but the unread count still counts. */
+    val archived: Boolean = false,
     val reads: List<RoomRead> = emptyList(),
     val pinned: List<Message> = emptyList(),
 ) {
@@ -207,3 +209,13 @@ data class TwoStepSetup(val secret: String, val uri: String)
 
 @Serializable
 data class TwoStepRecovery(val recovery: List<String> = emptyList())
+
+/** Someone found by exact username or friend code, or someone on the blocked list. */
+@Serializable
+data class LookupResult(val user: User? = null, val relation: String = "none")
+
+@Serializable
+data class FriendCode(val code: String, val display: String)
+
+@Serializable
+data class BlocksResponse(val blocked: List<User> = emptyList())

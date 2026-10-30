@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Notifications
@@ -103,7 +104,7 @@ fun SettingsTab(nav: NavHostController) {
                 Column(Modifier.weight(1f)) {
                     Text(me?.displayName ?: "", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                     Text(
-                        me?.statusMessage?.ifBlank { null } ?: "@${me?.username ?: ""}",
+                        me?.statusMessage?.ifBlank { null } ?: (me?.username ?: ""),
                         style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
                     )
                 }
@@ -114,6 +115,7 @@ fun SettingsTab(nav: NavHostController) {
             ActionRow(Icons.Filled.DarkMode, "Appearance", "Theme, colours, chat wallpaper") { nav.navigate("settings/appearance") }
             ActionRow(Icons.Filled.Keyboard, "Chats and calls", "Enter key, photos, nudges, echo") { nav.navigate("settings/chats") }
             ActionRow(Icons.Filled.Search, "GIFs and stickers", "Search Giphy, Imgur and more") { nav.navigate("settings/online") }
+            ActionRow(Icons.Filled.Person, "Username and password", "Change either one") { nav.navigate("settings/account") }
             ActionRow(Icons.Filled.Lock, "Two-step sign-in", "A code from an authenticator app at sign-in") { nav.navigate("settings/twostep") }
             ActionRow(Icons.Filled.Backup, "Backup and encryption", "Automatic backups, restore, your key") { nav.navigate("settings/backup") }
             UpdateRow()
@@ -155,6 +157,7 @@ fun SettingsPage(nav: NavHostController, page: String) {
         "chats" -> "Chats and calls"
         "backup", "encryption" -> "Backup and encryption"
         "twostep" -> "Two-step sign-in"
+        "account" -> "Username and password"
         "online" -> "GIFs and stickers"
         else -> "Settings"
     }
@@ -171,6 +174,7 @@ fun SettingsPage(nav: NavHostController, page: String) {
                 "chats" -> ChatsPage()
                 "backup", "encryption" -> BackupRows()
                 "twostep" -> TwoStepRows()
+                "account" -> AccountRows()
                 "online" -> OnlineRows()
             }
             Spacer(Modifier.height(32.dp))
@@ -397,7 +401,7 @@ fun ProfileScreen(nav: NavHostController) {
             Spacer(Modifier.height(12.dp))
             OutlinedTextField(value = about, onValueChange = { about = it }, label = { Text("About") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(8.dp))
-            Text("@${me?.username ?: ""}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(me?.username ?: "", color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (error != null) Text(error!!, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp))
             Spacer(Modifier.height(20.dp))
             androidx.compose.material3.Button(

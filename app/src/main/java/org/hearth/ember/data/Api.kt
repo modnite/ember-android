@@ -150,6 +150,20 @@ class Api(private val store: SessionStore, val client: OkHttpClient) {
     suspend fun users(): List<User> = get<UsersResponse>("/api/users").users
     suspend fun contacts(): ContactsResponse = get("/api/contacts")
     suspend fun addContact(username: String) = send("POST", "/api/contacts", buildJsonObject { put("username", username) })
+    /** An exact username or friend code. The server never lists people, so this is how someone is found. */
+    suspend fun lookup(query: String): LookupResult = get("/api/users/lookup?q=" + java.net.URLEncoder.encode(query, "UTF-8"))
+    suspend fun friendCode(): FriendCode = get("/api/friend-code")
+    suspend fun newFriendCode(): FriendCode = post("/api/friend-code")
+    suspend fun blocks(): BlocksResponse = get("/api/blocks")
+    suspend fun block(userId: String) { send("POST", "/api/blocks", buildJsonObject { put("userId", userId) }) }
+    suspend fun unblock(userId: String) { send("DELETE", "/api/blocks/$userId") }
+    suspend fun changeUsername(username: String, password: String): User =
+        post<UserResponse>("/api/auth/username", buildJsonObject { put("username", username); put("password", password) }).user
+    suspend fun changePassword(current: String, next: String) {
+        send("POST", "/api/auth/change-password", buildJsonObject { put("current", current); put("next", next) })
+    }
+    suspend fun archiveRoom(roomId: String, archived: Boolean): Room =
+        post<RoomResponse>("/api/rooms/$roomId/archive", buildJsonObject { put("archived", archived) }).room
     suspend fun acceptContact(id: String) = send("POST", "/api/contacts/$id/accept", buildJsonObject {})
     suspend fun removeContact(id: String) = send("DELETE", "/api/contacts/$id")
     suspend fun openDm(userId: String): Room = post<RoomResponse>("/api/users/$userId/dm").room

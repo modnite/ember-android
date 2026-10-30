@@ -327,6 +327,38 @@ class Repository(
         refreshPeople()
     }
 
+    /** Archive or unarchive a chat (for me only). Archived chats leave the main list and stop notifying; the unread count is kept. */
+    suspend fun archive(roomId: String, archived: Boolean) {
+        upsertRoom(api.archiveRoom(roomId, archived))
+    }
+
+    private val _blocked = MutableStateFlow<List<User>>(emptyList())
+    val blocked: StateFlow<List<User>> = _blocked.asStateFlow()
+
+    suspend fun refreshBlocked() {
+        _blocked.value = api.blocks().blocked
+    }
+
+    suspend fun block(id: String) {
+        api.block(id)
+        refreshPeople()
+        refreshBlocked()
+    }
+
+    suspend fun unblock(id: String) {
+        api.unblock(id)
+        refreshBlocked()
+    }
+
+    suspend fun changeUsername(username: String, password: String) {
+        _me.value = api.changeUsername(username.trim(), password)
+    }
+
+    /** Change the password. The server signs other devices out; this one stays signed in. */
+    suspend fun changePassword(current: String, next: String) {
+        api.changePassword(current, next)
+    }
+
     suspend fun updateProfile(displayName: String?, statusMessage: String?) {
         _me.value = api.updateMe(displayName, statusMessage)
     }

@@ -3,6 +3,10 @@ package org.hearth.ember.ui.home
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.material.icons.outlined.Archive
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -124,7 +128,7 @@ private fun WideHome(nav: NavHostController) {
     val contacts by app.repo.contacts.collectAsState()
     val selected by app.selectedRoom.collectAsState()
     val connected by app.repo.connected.collectAsState()
-    val unread = rooms.sumOf { it.unread }
+    val unread = rooms.filter { !it.archived }.sumOf { it.unread }
     val waiting = contacts.incoming.size
     CompositionLocalProvider(LocalOpenChat provides { id -> app.selectedRoom.value = id }) {
         Row(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))) {
@@ -182,7 +186,7 @@ private fun NarrowHome(nav: NavHostController) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     val rooms by app.repo.rooms.collectAsState()
     val contacts by app.repo.contacts.collectAsState()
-    val unread = rooms.sumOf { it.unread }
+    val unread = rooms.filter { !it.archived }.sumOf { it.unread }
     val waiting = contacts.incoming.size
     val connected by app.repo.connected.collectAsState()
 
@@ -241,11 +245,18 @@ private fun ChatsTab(nav: NavHostController, connected: Boolean) {
     var searching by rememberSaveable { mutableStateOf(false) }
     val openChat = LocalOpenChat.current
     val meId = me?.id ?: ""
-    val shown = remember(rooms, query) {
+    val matching = remember(rooms, query) {
         if (query.isBlank()) rooms else rooms.filter { r ->
             r.title(meId).contains(query, true) || (r.lastMessage?.body?.contains(query, true) == true)
         }
     }
+    // Archived chats leave the main list; one row at the bottom opens them and carries their unread count.
+    val shown = remember(matching) { matching.filter { !it.archived } }
+    val archivedRooms = remember(matching) { matching.filter { it.archived } }
+    val archivedUnread = archivedRooms.sumOf { it.unread }
+    var showArchived by rememberSaveable { mutableStateOf(false) }
+    val archiveOpen = showArchived || (query.isNotBlank() && archivedRooms.isNotEmpty())
+    var menuRoom by remember { mutableStateOf<Room?>(null) }
 
     // Messages that match, found on the server (plain chats) and in what this phone already holds (encrypted chats cannot be searched there).
     var hits by remember { mutableStateOf<List<Pair<Room, Message>>>(emptyList()) }
@@ -307,7 +318,7 @@ private fun ChatsTab(nav: NavHostController, connected: Boolean) {
         )
         when {
             !loaded -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { androidx.compose.material3.CircularProgressIndicator() }
-            shown.isEmpty() && hits.isEmpty() -> EmptyChats(query.isNotBlank()) { nav.navigate("newchat") }
+            shown.isEmpty() && archivedRooms.isEmpty() && hits.isEmpty() -> EmptyChats(query.isNotBlank()) { nav.navigate("newchat") }
             else -> LazyColumn(Modifier.fillMaxSize()) {
                 if (hits.isNotEmpty() && shown.isNotEmpty()) item("chats-label") { SectionLabel("Chats") }
                 items(shown, key = { it.id }) { room ->
@@ -316,7 +327,30 @@ private fun ChatsTab(nav: NavHostController, connected: Boolean) {
                         typingNames = typing[room.id].orEmpty().filter { it != meId }.map { app.repo.userName(it) },
                         inCall = calls[room.id] != null,
                         onClick = { openChat(room.id) },
+                        onLongClick = { menuRoom = room },
                     )
+                }
+                if (archivedRooms.isNotEmpty()) {
+                    item("archived-row") {
+                        Row(
+                            Modifier.fillMaxWidth().clickable { showArchived = !showArchived }.padding(horizontal = 20.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Outlined.Archive, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(Modifier.width(16.dp))
+                            Text("Archived (${archivedRooms.size})", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                            if (archivedUnread > 0) Text("$archivedUnread", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    if (archiveOpen) items(archivedRooms, key = { "arch-" + it.id }) { room ->
+                        ChatRow(
+                            room = room, meId = meId,
+                            typingNames = emptyList(),
+                            inCall = false,
+                            onClick = { openChat(room.id) },
+                            onLongClick = { menuRoom = room },
+                        )
+                    }
                 }
                 if (hits.isNotEmpty()) {
                     item("messages-label") { SectionLabel("Messages") }
@@ -336,6 +370,21 @@ private fun ChatsTab(nav: NavHostController, connected: Boolean) {
                 }
             }
         }
+    }
+
+    menuRoom?.let { r ->
+        val scope = rememberCoroutineScope()
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { menuRoom = null },
+            title = { Text(r.title(meId)) },
+            text = { Text(if (r.archived) "Move this chat back to your chats." else "Archived chats leave your list and stay quiet. Their unread count is kept, and they stay archived when new messages arrive.") },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = { menuRoom = null; scope.launch { runCatching { app.repo.archive(r.id, !r.archived) } } }) {
+                    Text(if (r.archived) "Unarchive" else "Archive")
+                }
+            },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { menuRoom = null }) { Text("Cancel") } },
+        )
     }
 }
 
@@ -358,13 +407,14 @@ private fun EmptyChats(searching: Boolean, onNew: () -> Unit) {
 }
 
 /** One conversation in the list: picture, name, the last thing said, when, and how many are unread. */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun ChatRow(room: Room, meId: String, typingNames: List<String>, inCall: Boolean, onClick: () -> Unit) {
+private fun ChatRow(room: Room, meId: String, typingNames: List<String>, inCall: Boolean, onClick: () -> Unit, onLongClick: () -> Unit = {}) {
     val app = LocalContext.current.ember
     val last = room.lastMessage
     val unread = room.unread
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 10.dp),
+        Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = onLongClick).padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         RoomAvatar(room, meId, 54.dp)

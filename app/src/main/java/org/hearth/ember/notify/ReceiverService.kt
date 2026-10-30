@@ -115,6 +115,8 @@ object NotifyPump {
             app.callNotifier.ring(payload)
             return
         }
+        // An archived chat is quiet (the server already leaves it out; this covers one archived a moment ago).
+        if (payload.roomId != null && app.repo.room(payload.roomId)?.archived == true) return
         if (payload.tag?.startsWith("nudge-") == true) {
             app.notifier.nudge(payload)
             return
