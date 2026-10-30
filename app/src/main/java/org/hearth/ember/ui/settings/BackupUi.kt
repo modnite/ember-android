@@ -229,7 +229,8 @@ fun BackupRows() {
     ActionRow(Icons.Filled.CreateNewFolder, "Add a place", "This server, a folder or cloud drive, WebDAV, S3, FTP, SFTP") { dialog = Dlg.AddPlace }
     ActionRow(
         Icons.Filled.History, "Included",
-        "Key, settings, stickers" + (if (settings.includeHistory) ", chats" else "") + (if (settings.includeHistory && settings.includeMedia) " and files" else "") + ". Keeps ${settings.keep}.",
+        if (settings.includeHistory) "Key, settings, stickers and chats" + (if (settings.includeMedia) " and files" else "") + ". Keeps ${settings.keep}."
+        else "Key, settings and stickers only. Chats are not included. Keeps ${settings.keep}.",
     ) { dialog = Dlg.Included }
 
     Section("Keys and restore")

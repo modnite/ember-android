@@ -178,7 +178,11 @@ class BackupService(private val app: EmberApp, private val context: Context) {
                     t.put(core.name, core)
                     archive?.let { t.put(it.name, it) }
                     prune(t)
-                    BackupRun(now, true, if (unchanged) "Backed up (chats unchanged)" else "Backed up", core.length() + (archive?.length() ?: 0L))
+                    BackupRun(now, true, when {
+                        !settings.includeHistory -> "Backed up key and settings only. Chat history is switched off."
+                        unchanged -> "Backed up (chats unchanged)"
+                        else -> "Backed up"
+                    }, core.length() + (archive?.length() ?: 0L))
                 }.getOrElse { if (it is kotlinx.coroutines.CancellationException) throw it; BackupRun(now, false, it.message ?: "The backup failed.") }
                 settings.record(d.id, run)
                 d to run

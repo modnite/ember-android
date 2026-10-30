@@ -205,8 +205,9 @@ class BackupSettings(context: Context) {
         get() = prefs.getString("passphrase", "") ?: ""
         set(v) { prefs.edit().putString("passphrase", v).apply(); changed() }
 
+    /** Chats are in a backup unless the person switched them off (from 0.9.1; before it the switch started off, so a backup was only the key, settings and stickers). */
     var includeHistory: Boolean
-        get() = prefs.getBoolean("history", false)
+        get() = prefs.getBoolean("history", true)
         set(v) { prefs.edit().putBoolean("history", v).apply(); changed() }
 
     var includeMedia: Boolean
