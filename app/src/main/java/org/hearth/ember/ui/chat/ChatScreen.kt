@@ -838,7 +838,8 @@ private fun EmojiPanel(
     }
 }
 
-private val EmojiCategoryIcons = listOf("⭐", "😀", "🐱", "🚗", "💡", "❤️")
+private val EmojiCategoryIcons = listOf("🕒", "⭐", "😀", "🐱", "🚗", "💡", "❤️")
+private const val RecentEmojiMax = 24
 
 /**
  * Emoji, GIFs and stickers (the last two only when sending a message, not when reacting). The emoji grid fills the panel and scrolls, with a row of
@@ -852,7 +853,17 @@ private fun EmojiBody(
     onSettings: () -> Unit = {}, onPick: (String) -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf(0) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val recentPrefs = remember { context.getSharedPreferences("ember_emoji", android.content.Context.MODE_PRIVATE) }
+    // The last 24 emoji used, newest first, kept across launches; the first tab shows them.
+    val recents = remember { androidx.compose.runtime.mutableStateListOf<String>().apply { addAll((recentPrefs.getString("recent", "") ?: "").split(' ').filter { it.isNotEmpty() }.take(RecentEmojiMax)) } }
+    var category by remember { mutableStateOf(if (recents.isEmpty()) 1 else 0) }
+    val pick: (String) -> Unit = { e ->
+        recents.remove(e); recents.add(0, e)
+        while (recents.size > RecentEmojiMax) recents.removeAt(recents.lastIndex)
+        recentPrefs.edit().putString("recent", recents.joinToString(" ")).apply()
+        onPick(e)
+    }
     var searching by remember { mutableStateOf(false) }
     var section by remember { mutableStateOf(0) } // 0 emoji, 1 GIFs, 2 stickers
     val kinds = onSticker != null && onGif != null
@@ -886,14 +897,14 @@ private fun EmojiBody(
                         if (query.isBlank()) "Type a word: heart, cat, pizza…" else "No emoji for that.",
                         style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
                     ) else androidx.compose.foundation.lazy.LazyRow(contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp)) {
-                        items(suggestions.size) { i -> Text(suggestions[i].glyph, fontSize = 30.sp, modifier = Modifier.clip(CircleShape).clickable { onPick(suggestions[i].glyph) }.padding(8.dp)) }
+                        items(suggestions.size) { i -> Text(suggestions[i].glyph, fontSize = 30.sp, modifier = Modifier.clip(CircleShape).clickable { pick(suggestions[i].glyph) }.padding(8.dp)) }
                     }
                 }
                 else -> Column(Modifier.fillMaxSize()) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = { searching = true }) { Icon(Icons.Filled.Search, "Search emoji") }
                         androidx.compose.foundation.lazy.LazyRow(Modifier.weight(1f)) {
-                            items(EmojiCategories.size) { i ->
+                            items(EmojiCategoryIcons.size) { i ->
                                 Box(
                                     Modifier.padding(horizontal = 2.dp).size(40.dp).clip(CircleShape)
                                         .background(if (category == i) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else Color.Transparent).clickable { category = i },
@@ -902,13 +913,15 @@ private fun EmojiBody(
                             }
                         }
                     }
-                    val list = remember(category) { AllEmoji.filter { it.category == category } }
+                    val list: List<String> = if (category == 0) recents.toList() else remember(category) { AllEmoji.filter { it.category == category - 1 }.map { it.glyph } }
+                    val wide = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 600
+                    if (category == 0 && list.isEmpty()) Text("Emoji you use show up here.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(20.dp))
                     androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
-                        columns = androidx.compose.foundation.lazy.grid.GridCells.Adaptive(46.dp), state = gridState,
+                        columns = if (wide) androidx.compose.foundation.lazy.grid.GridCells.Adaptive(46.dp) else androidx.compose.foundation.lazy.grid.GridCells.Fixed(8), state = gridState,
                         modifier = Modifier.fillMaxWidth().weight(1f).padding(horizontal = 8.dp),
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 8.dp, top = 2.dp),
                     ) {
-                        items(list.size) { i -> Text(list[i].glyph, fontSize = 28.sp, modifier = Modifier.clip(CircleShape).clickable { onPick(list[i].glyph) }.padding(8.dp)) }
+                        items(list.size) { i -> Text(list[i], fontSize = 26.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.fillMaxWidth().clip(CircleShape).clickable { pick(list[i]) }.padding(vertical = 8.dp)) }
                     }
                 }
             }
