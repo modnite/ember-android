@@ -1,5 +1,8 @@
 package org.hearth.ember.ui.settings
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,6 +21,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusEvent
+import kotlinx.coroutines.delay
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -43,6 +48,15 @@ internal fun passwordProblem(next: String, again: String): String? = when {
     else -> null
 }
 
+/** A field that scrolls itself into view when it gets focus, once the keyboard has come up, so it is never left behind it. */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun Modifier.revealWhenFocused(): Modifier {
+    val requester = remember { BringIntoViewRequester() }
+    val scope = rememberCoroutineScope()
+    return this.bringIntoViewRequester(requester).onFocusEvent { if (it.isFocused) scope.launch { delay(300); requester.bringIntoView() } }
+}
+
 /**
  * Change the username or the password. Both ask for the current password. A username given up is free for anyone, including its old owner, but
  * two people never hold one at once. A password used before cannot come back (the server decides), and the other devices are signed out.
@@ -63,11 +77,11 @@ fun AccountRows() {
 
     Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("Your username is ${me?.username.orEmpty()}. It is $USERNAME_RULE.", style = MaterialTheme.typography.bodyMedium)
-        OutlinedTextField(name, { name = it }, singleLine = true, label = { Text("New username") }, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(name, { name = it }, singleLine = true, label = { Text("New username") }, modifier = Modifier.fillMaxWidth().revealWhenFocused())
         OutlinedTextField(
             namePassword, { namePassword = it }, singleLine = true, label = { Text("Password") },
             visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().revealWhenFocused(),
         )
         Button(
             enabled = !busy && name.isNotBlank() && namePassword.isNotEmpty(),
@@ -92,7 +106,7 @@ fun AccountRows() {
             OutlinedTextField(
                 value, set, singleLine = true, label = { Text(label) },
                 visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().revealWhenFocused(),
             )
         }
         Button(

@@ -1,5 +1,6 @@
 package org.hearth.ember.ui.contacts
 
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.background
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
@@ -356,7 +357,7 @@ fun NewGroupScreen(nav: NavHostController) {
             ) { Icon(Icons.Filled.Check, "Create group") }
         },
     ) { padding ->
-        Column(Modifier.padding(padding).fillMaxSize()) {
+        Column(Modifier.padding(padding).fillMaxSize().imePadding()) {
             OutlinedTextField(
                 value = name, onValueChange = { name = it }, label = { Text("Group name") }, singleLine = true,
                 modifier = Modifier.fillMaxWidth().padding(16.dp),

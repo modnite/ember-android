@@ -1,5 +1,7 @@
 package org.hearth.ember.ui.settings
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
@@ -237,7 +239,7 @@ fun BackupRows() {
             onDismissRequest = { dialog = null },
             title = { Text("Add WebDAV or Nextcloud") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(url, { url = it }, singleLine = true, label = { Text("Folder address") }, placeholder = { Text("https://cloud.example.com/remote.php/dav/files/you/Backups") })
                     OutlinedTextField(user, { user = it }, singleLine = true, label = { Text("Username") })
                     OutlinedTextField(davPass, { davPass = it }, singleLine = true, label = { Text("Password or app password") }, visualTransformation = PasswordVisualTransformation())
@@ -261,7 +263,7 @@ fun BackupRows() {
             onDismissRequest = { dialog = null },
             title = { Text("Your backup key") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(d.text, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace))
                     Text("Key ${d.id}. Anyone who has this key and one of your backup files can read it, so keep it to yourself. The Ember backup reader on a computer asks for it, or for your sign-in.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -366,7 +368,7 @@ fun BackupRows() {
             onDismissRequest = { dialog = null; pass = "" },
             title = { Text("Your account password") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("This backup is sealed under the password of the account that made it. It is only used to open the backup.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     OutlinedTextField(pass, { pass = it }, singleLine = true, label = { Text("Password") }, visualTransformation = PasswordVisualTransformation())
                 }
@@ -377,7 +379,7 @@ fun BackupRows() {
         is Dlg.AskPassphrase -> AlertDialog(
             onDismissRequest = { dialog = null; pass = "" },
             title = { Text("An older backup, sealed with a passphrase") },
-            text = { OutlinedTextField(pass, { pass = it }, singleLine = true, label = { Text("Passphrase") }, visualTransformation = PasswordVisualTransformation()) },
+            text = { Column(Modifier.verticalScroll(rememberScrollState())) { OutlinedTextField(pass, { pass = it }, singleLine = true, label = { Text("Passphrase") }, visualTransformation = PasswordVisualTransformation()) } },
             confirmButton = { TextButton(enabled = pass.isNotEmpty(), onClick = { val p = pass; pass = ""; dialog = null; d.then(p) }) { Text("Restore") } },
             dismissButton = { TextButton(onClick = { dialog = null; pass = "" }) { Text("Cancel") } },
         )
@@ -472,7 +474,7 @@ fun RestoreOnSignIn(server: String, username: String, password: String, onClose:
             onDismissRequest = onClose,
             title = { Text("Your backup server") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(url, { url = it }, singleLine = true, label = { Text("Folder address") })
                     OutlinedTextField(user, { user = it }, singleLine = true, label = { Text("Username") })
                     OutlinedTextField(davPass, { davPass = it }, singleLine = true, label = { Text("Password or app password") }, visualTransformation = PasswordVisualTransformation())
@@ -485,7 +487,7 @@ fun RestoreOnSignIn(server: String, username: String, password: String, onClose:
         else -> AlertDialog(
             onDismissRequest = onClose,
             title = { Text("An older backup, sealed with a passphrase") },
-            text = { OutlinedTextField(passphrase, { passphrase = it }, singleLine = true, label = { Text("Passphrase") }, visualTransformation = PasswordVisualTransformation()) },
+            text = { Column(Modifier.verticalScroll(rememberScrollState())) { OutlinedTextField(passphrase, { passphrase = it }, singleLine = true, label = { Text("Passphrase") }, visualTransformation = PasswordVisualTransformation()) } },
             confirmButton = { TextButton(enabled = passphrase.isNotEmpty(), onClick = { val p = passphrase; passphrase = ""; continueWith?.invoke(p) }) { Text("Restore") } },
             dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } },
         )

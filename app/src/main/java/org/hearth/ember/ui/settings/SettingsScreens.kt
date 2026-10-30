@@ -12,6 +12,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -167,7 +168,8 @@ fun SettingsPage(nav: NavHostController, page: String) {
             title = { Text(title, fontWeight = FontWeight.SemiBold) },
             colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
         )
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        // imePadding: the page ends above the keyboard, so a field being typed in is never behind it
+        Column(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState())) {
             when (page) {
                 "notifications", "sounds" -> { NotificationsPage(); SoundsPage() }
                 "appearance" -> AppearancePage()

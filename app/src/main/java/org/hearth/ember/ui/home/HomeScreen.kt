@@ -1,5 +1,6 @@
 package org.hearth.ember.ui.home
 
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -319,7 +320,7 @@ private fun ChatsTab(nav: NavHostController, connected: Boolean) {
         when {
             !loaded -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { androidx.compose.material3.CircularProgressIndicator() }
             shown.isEmpty() && archivedRooms.isEmpty() && hits.isEmpty() -> EmptyChats(query.isNotBlank()) { nav.navigate("newchat") }
-            else -> LazyColumn(Modifier.fillMaxSize()) {
+            else -> LazyColumn(Modifier.fillMaxSize().imePadding()) {
                 if (hits.isNotEmpty() && shown.isNotEmpty()) item("chats-label") { SectionLabel("Chats") }
                 items(shown, key = { it.id }) { room ->
                     ChatRow(

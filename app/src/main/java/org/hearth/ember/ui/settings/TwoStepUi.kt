@@ -1,5 +1,7 @@
 package org.hearth.ember.ui.settings
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
@@ -110,7 +112,7 @@ fun TwoStepRows() {
             icon = { androidx.compose.material3.Icon(Icons.Filled.Lock, null) },
             title = { Text("Your recovery codes") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Keep these somewhere safe. Each works once if you lose your phone. They are not shown again.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(codes.joinToString("\n"), style = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace))
                 }
@@ -124,7 +126,7 @@ fun TwoStepRows() {
         onDismissRequest = { turningOff = false },
         title = { Text("Turn off two-step sign-in") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(password, { password = it }, singleLine = true, label = { Text("Password") }, visualTransformation = PasswordVisualTransformation())
                 OutlinedTextField(code, { code = it }, singleLine = true, label = { Text("Code from the app, or a recovery code") })
                 Spacer(Modifier.height(2.dp))

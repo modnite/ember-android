@@ -1,5 +1,6 @@
 package org.hearth.ember.ui.chat
 
+import androidx.compose.foundation.layout.imePadding
 import android.net.Uri
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -78,7 +79,7 @@ fun ShareScreen(nav: NavHostController) {
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         )
         failure?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 16.dp)) }
-        LazyColumn(Modifier.fillMaxSize()) {
+        LazyColumn(Modifier.fillMaxSize().imePadding()) {
             items(shown, key = { it.id }) { room ->
                 Row(
                     Modifier.fillMaxWidth().clickable(enabled = p != null) {

@@ -1,5 +1,7 @@
 package org.hearth.ember.ui.chat
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -162,7 +164,7 @@ fun RoomDetailsScreen(nav: NavHostController, roomId: String) {
             onDismissRequest = { editing = false },
             title = { Text("Edit group") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedTextField(name, { name = it }, singleLine = true, label = { Text("Name") })
                     OutlinedTextField(topic, { topic = it }, label = { Text("Topic") }, maxLines = 3)
                 }
