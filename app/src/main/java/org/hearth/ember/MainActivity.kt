@@ -104,6 +104,16 @@ class MainActivity : ComponentActivity() {
             readShare(intent)
             return
         }
+        // Debug builds only: run the background update check once, now (adb shell am start -a org.hearth.ember.TEST_UPDATE_CHECK).
+        if (BuildConfig.DEBUG && intent?.action == "org.hearth.ember.TEST_UPDATE_CHECK") {
+            androidx.work.WorkManager.getInstance(this).enqueue(androidx.work.OneTimeWorkRequestBuilder<org.hearth.ember.data.UpdateWorker>().build())
+            return
+        }
+        if (intent?.action == org.hearth.ember.data.UpdateNotice.ACTION_OPEN_UPDATE) {
+            // From the "a newer Ember is ready" notification: look again now, and the update dialog opens by itself.
+            lifecycleScope.launch { runCatching { ember.updater.check() } }
+            return
+        }
         val room = intent?.getStringExtra(Notifier.EXTRA_ROOM) ?: return
         when (intent.action) {
             Notifier.ACTION_OPEN_CHAT -> pendingRoom.value = room

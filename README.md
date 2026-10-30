@@ -56,7 +56,7 @@ keyPassword=...
 
 ## Installing and updating
 
-Download `Ember-x.y.z.apk` from the [latest release](../../releases/latest) and open it (Android asks once to allow installs from your browser or files app). Ember checks this repository's releases by itself about twice a day. When there is a newer version it offers the update, downloads it and hands it to Android's installer. Settings → the version line at the bottom also checks on a tap. Android only accepts an update signed with the same key as the installed app, so a file from anywhere else cannot replace Ember.
+Download `Ember-x.y.z.apk` from the [latest release](../../releases/latest) and open it (Android asks once to allow installs from your browser or files app). Ember checks this repository's releases by itself about twice a day, even while the app is closed, and posts a notification (once per version) that opens the update; Settings has a switch, "Tell me about updates". When there is a newer version it offers the update, downloads it and hands it to Android's installer. Settings → the version line at the bottom also checks on a tap. Android only accepts an update signed with the same key as the installed app, so a file from anywhere else cannot replace Ember.
 
 ## Making a release
 

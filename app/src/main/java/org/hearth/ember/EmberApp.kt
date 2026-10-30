@@ -69,6 +69,9 @@ class EmberApp : Application(), ImageLoaderFactory {
         callNotifier = CallNotifier(this)
         callController = org.hearth.ember.call.CallController(this)
         notifier.createChannels()
+        org.hearth.ember.data.UpdateWorker.schedule(this)
+        // An old "update ready" notice does not outlive the update itself.
+        if (!org.hearth.ember.data.Versions.isNewer(updater.lastNotified, BuildConfig.VERSION_NAME)) org.hearth.ember.data.UpdateNotice.clear(this)
         scope.launch(kotlinx.coroutines.Dispatchers.Default) { org.hearth.ember.data.BackupScheduler.apply(this@EmberApp, backup.settings) }
         scope.launch { repo.ring.collect { if (it != null) ringer.start() else ringer.stop() } }
         // A nudge reaches you wherever you are in the app, not only in the chat it came from: the phone buzzes and plays the sound (louder, and on the

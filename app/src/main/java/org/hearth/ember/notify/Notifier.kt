@@ -93,6 +93,11 @@ class Notifier(private val context: Context) {
             },
         )
         system.createNotificationChannel(
+            NotificationChannel(CHANNEL_UPDATES, "App updates", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = "When a newer version of Ember is ready to install"
+            },
+        )
+        system.createNotificationChannel(
             NotificationChannel(CHANNEL_ONGOING, "Ongoing call", NotificationManager.IMPORTANCE_LOW).apply {
                 description = "Shown while you are on a call"
                 setShowBadge(false)
@@ -213,6 +218,7 @@ class Notifier(private val context: Context) {
         const val CHANNEL_SERVICE = "link"
         const val CHANNEL_NUDGES = "nudges"
         const val CHANNEL_ONGOING = "ongoing"
+        const val CHANNEL_UPDATES = "updates"
         const val GROUP = "ember_chats"
         const val SUMMARY_ID = 1
         const val NUDGE_ID = 5

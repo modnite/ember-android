@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
@@ -56,6 +57,8 @@ fun UpdateRow() {
         }
     }
     if (show) available?.let { UpdateDialog(it) { show = false } }
+    var tell by remember { mutableStateOf(app.updater.notifyEnabled) }
+    ToggleRow(Icons.Filled.Notifications, "Tell me about updates", "A notification when a newer Ember is ready, even if the app is closed.", tell) { tell = it; app.updater.notifyEnabled = it }
 }
 
 /** What an update offers: its notes, a download with progress, then Android's own installer. */

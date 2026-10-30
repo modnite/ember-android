@@ -59,6 +59,16 @@ class Updater(private val context: Context, private val client: OkHttpClient, pr
     val available: StateFlow<UpdateInfo?> = _available.asStateFlow()
     private val prefs = context.getSharedPreferences("ember_update", Context.MODE_PRIVATE)
 
+    /** Tell the person with a notification when a newer Ember is out (on by default). */
+    var notifyEnabled: Boolean
+        get() = prefs.getBoolean("notify", true)
+        set(v) { prefs.edit().putBoolean("notify", v).apply() }
+
+    /** The version a notification was last shown for, so each version is announced once. */
+    var lastNotified: String
+        get() = prefs.getString("lastNotified", "") ?: ""
+        set(v) { prefs.edit().putString("lastNotified", v).apply() }
+
     /** The check, now. Returns the newer release or null (also null when the check could not be made: [error] says which). */
     suspend fun check(): Result<UpdateInfo?> = withContext(Dispatchers.IO) {
         runCatching {
