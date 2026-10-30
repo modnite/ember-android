@@ -93,6 +93,12 @@ class BackupService(private val app: EmberApp, private val context: Context) {
 
     private var activeJob: kotlinx.coroutines.Job? = null
 
+    /** The password just typed at a fresh install's first sign-in, while the offer to restore a backup is waiting to be shown (null otherwise). */
+    val firstLoginOffer = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+
+    /** Called after someone signs in to an existing account: on the first sign-in of this install, offer to restore a backup. */
+    fun offerRestoreAfterSignIn(password: String) { if (!app.store.restoreOffered) firstLoginOffer.value = password }
+
     /** Stop the backup that is running (a restore cannot be stopped half way). */
     fun cancel() { activeJob?.cancel() }
 
@@ -133,7 +139,14 @@ class BackupService(private val app: EmberApp, private val context: Context) {
         (context.contentResolver.openOutputStream(uri, "wt") ?: throw BackupException("Could not write that file.")).use { it.write(bytes) }
     }
 
-    fun target(d: Destination): BackupTarget = if (d.isFolder) FolderTarget(context, d) else DavTarget(app.client, d)
+    fun target(d: Destination): BackupTarget = when (d.kind) {
+        Destination.KIND_FOLDER -> FolderTarget(context, d)
+        Destination.KIND_SERVER -> ServerTarget(app.client, app.store.server, d)
+        Destination.KIND_S3 -> S3Target(app.client, d)
+        Destination.KIND_FTP -> FtpTarget(d)
+        Destination.KIND_SFTP -> SftpTarget(d)
+        else -> DavTarget(app.client, d)
+    }
 
     private fun workDir() = File(context.cacheDir, "backups").also { it.mkdirs(); it.listFiles()?.forEach { f -> f.delete() } }
 

@@ -15,8 +15,8 @@ android {
         applicationId = "org.hearth.ember"
         minSdk = 26
         targetSdk = 35
-        versionCode = 30
-        versionName = "0.8.3"
+        versionCode = 31
+        versionName = "0.9.0"
         // Where Ember looks for newer versions of itself.
         buildConfigField("String", "UPDATE_REPO", "\"modnite/ember-android\"")
     }
@@ -33,6 +33,11 @@ android {
             keyPassword = keystore.getProperty("keyPassword")
         }
     }
+    packaging {
+        // BouncyCastle, JSch and others each ship the same OSGi manifest; one copy is enough.
+        resources.excludes += setOf("META-INF/versions/*/OSGI-INF/MANIFEST.MF", "META-INF/DEPENDENCIES", "META-INF/LICENSE*", "META-INF/NOTICE*")
+    }
+
     buildTypes {
         // A debug build installs next to the real app (own name, own data) so testing never touches the app that is in daily use.
         debug { applicationIdSuffix = ".debug"; versionNameSuffix = "-debug" }
@@ -80,6 +85,8 @@ dependencies {
     implementation("androidx.core:core-telecom:1.0.0")
     implementation("com.google.crypto.tink:tink-android:1.15.0")
     implementation("org.bouncycastle:bcprov-jdk18on:1.78.1") // Argon2id for the backup password (PasswordWrap)
+    implementation("commons-net:commons-net:3.11.1") // FTP and FTPS backup places
+    implementation("com.github.mwiede:jsch:0.2.20") // SFTP backup places
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")

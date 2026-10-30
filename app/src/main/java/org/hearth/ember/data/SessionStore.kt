@@ -27,6 +27,11 @@ class SessionStore(context: Context) {
         context.getSharedPreferences("ember_session_plain", Context.MODE_PRIVATE)
     }
 
+    /** Has this install already been asked whether to restore a backup after the first sign-in? Asked once. */
+    var restoreOffered: Boolean
+        get() = prefs.getBoolean("restoreOffered", false)
+        set(v) = prefs.edit().putBoolean("restoreOffered", v).apply()
+
     var server: String
         get() = prefs.getString("server", "") ?: ""
         set(v) = prefs.edit().putString("server", normalize(v)).apply()

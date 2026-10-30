@@ -144,4 +144,23 @@ class BackupModelTest {
         val failedLongAgo = listOf(run(now - 40 * hour), run(now - 2 * hour, ok = false))
         assertTrue(BackupScheduler.isOverdue(Schedule.Daily, true, failedLongAgo, now))
     }
+
+    // ---- S3 request signing, against the example Amazon publishes (GET /test.txt with a Range header)
+    @Test fun sigV4MatchesAmazonsPublishedExample() {
+        val headers = org.hearth.ember.data.SigV4.headers(
+            method = "GET", host = "examplebucket.s3.amazonaws.com", path = "/test.txt", query = "",
+            payloadHash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", region = "us-east-1",
+            accessKey = "AKIAIOSFODNN7EXAMPLE", secretKey = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", amzDate = "20130524T000000Z",
+            extra = mapOf("range" to "bytes=0-9"),
+        )
+        assertEquals(
+            "AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request, " +
+                "SignedHeaders=host;range;x-amz-content-sha256;x-amz-date, Signature=f0e8bdb87c964420e857bd35b5d6ed310bd44f0170aba48dd91039c6036bdb41",
+            headers["Authorization"],
+        )
+    }
+
+    @Test fun s3PathsKeepSlashesAndEncodeTheRest() {
+        assertEquals("Backups/ember%20backup%2B1.embkup", org.hearth.ember.data.SigV4.encodePath("Backups/ember backup+1.embkup"))
+    }
 }

@@ -73,6 +73,7 @@ import org.hearth.ember.ui.fileSize
 
 /** The windows the backup page can have open. */
 private sealed interface Dlg {
+    class AddRemote(val kind: String) : Dlg
     data object AddDav : Dlg
     data object Timing : Dlg
     data object AddPlace : Dlg
@@ -225,7 +226,7 @@ fun BackupRows() {
             IconButton(onClick = { settings.destinations = settings.destinations.filter { it.id != d.id }; settings.lastRuns = settings.lastRuns - d.id }) { Icon(Icons.Filled.Delete, "Remove ${d.label}") }
         }
     }
-    ActionRow(Icons.Filled.CreateNewFolder, "Add a place", "A folder on this phone or a drive, WebDAV or Nextcloud") { dialog = Dlg.AddPlace }
+    ActionRow(Icons.Filled.CreateNewFolder, "Add a place", "This server, a folder or cloud drive, WebDAV, S3, FTP, SFTP") { dialog = Dlg.AddPlace }
     ActionRow(
         Icons.Filled.History, "Included",
         "Key, settings, stickers" + (if (settings.includeHistory) ", chats" else "") + (if (settings.includeHistory && settings.includeMedia) " and files" else "") + ". Keeps ${settings.keep}.",
@@ -306,6 +307,11 @@ fun BackupRows() {
             },
             confirmButton = { TextButton(onClick = { dialog = null }) { Text("Done") } },
         )
+        is Dlg.AddRemote -> RemotePlaceForm(d.kind, onCancel = { dialog = null }) { dest ->
+            settings.destinations = settings.destinations + dest
+            dialog = null
+            say("Added ${dest.label}.")
+        }
         Dlg.AddPlace -> AlertDialog(
             onDismissRequest = { dialog = null },
             title = { Text("Add a place") },
@@ -313,6 +319,17 @@ fun BackupRows() {
                 Column {
                     Choice("A folder", "On this phone, an SD card or USB drive, or a network share through its app") { dialog = null; turningOn = false; addFolder.launch(null) }
                     Choice("WebDAV or Nextcloud", "Your own server") { url = ""; user = ""; davPass = ""; label = ""; dialog = Dlg.AddDav }
+                    if (settings.destinations.none { it.kind == Destination.KIND_SERVER }) Choice("This Hearth server", "Kept in your own space on ${app.store.server.removePrefix("https://").removePrefix("http://")}, so a new phone finds it when you sign in") {
+                        dialog = null
+                        scope.launch {
+                            val d = Destination("server", Destination.KIND_SERVER, app.store.server.removePrefix("https://").removePrefix("http://"), app.store.server)
+                            progress = "Checking the server\u2026"
+                            runCatching { withContext(Dispatchers.IO) { app.backup.target(d).list() } }.onSuccess { settings.destinations = settings.destinations + d; say("Added ${d.label}.") }.onFailure { problem(it) }
+                            progress = null
+                        }
+                    }
+                    for (k in REMOTE_KINDS) Choice(k.title, k.subtitle) { dialog = Dlg.AddRemote(k.kind) }
+                    Text("Google Drive, OneDrive, Proton Drive, Dropbox and others: choose A folder, and pick the folder inside their app (they show up in the picker once the app is installed).", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
                 }
             },
             confirmButton = { TextButton(onClick = { dialog = null }) { Text("Cancel") } },

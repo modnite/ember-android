@@ -32,12 +32,17 @@ enum class Schedule(val label: String, val hours: Long) {
 
 /** A place backups are kept: a folder Android can reach (this phone, an SD card, a network share through its app), or a WebDAV or Nextcloud folder. */
 @Serializable
-data class Destination(val id: String, val kind: String, val label: String, val uri: String, val user: String = "", val pass: String = "") {
+data class Destination(val id: String, val kind: String, val label: String, val uri: String, val user: String = "", val pass: String = "", val extra: String = "") {
     val isFolder get() = kind == KIND_FOLDER
 
     companion object {
         const val KIND_FOLDER = "folder"
         const val KIND_DAV = "dav"
+        /** The backups kept on the Hearth server this phone is signed in to. */
+        const val KIND_SERVER = "server"
+        const val KIND_S3 = "s3"
+        const val KIND_FTP = "ftp"
+        const val KIND_SFTP = "sftp"
     }
 }
 

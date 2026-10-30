@@ -265,6 +265,9 @@ private fun EmberRoot(pendingRoom: androidx.compose.runtime.MutableState<String?
             }
         }
     }
+    // The first sign-in on this install: offer to restore a backup (from this server if the account has one there, or another place).
+    val firstLogin by app.backup.firstLoginOffer.collectAsState()
+    firstLogin?.let { pw -> org.hearth.ember.ui.settings.FirstLoginRestore(pw) { app.backup.firstLoginOffer.value = null } }
     // A newer Ember was found: say so once per launch and offer to install it.
     val update by app.updater.available.collectAsState()
     var dismissedUpdate by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf<String?>(null) }
