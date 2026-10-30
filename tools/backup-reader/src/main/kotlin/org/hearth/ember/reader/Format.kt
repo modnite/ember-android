@@ -65,6 +65,9 @@ object Format {
         return Info(o["ember_backup"]!!.jsonPrimitive.int, o["encrypted"]?.jsonPrimitive?.boolean == true, o["keyed"]?.jsonPrimitive?.boolean == true, o["keyId"]?.jsonPrimitive?.contentOrNull)
     }
 
+    fun gzip(bytes: ByteArray): ByteArray = java.io.ByteArrayOutputStream().also { out -> java.util.zip.GZIPOutputStream(out).use { it.write(bytes) } }.toByteArray()
+    fun gunzip(bytes: ByteArray): ByteArray = java.util.zip.GZIPInputStream(bytes.inputStream()).use { it.readBytes() }
+
     private fun gcm(mode: Int, key: ByteArray, nonce: ByteArray) =
         Cipher.getInstance("AES/GCM/NoPadding").apply { init(mode, SecretKeySpec(key, "AES"), GCMParameterSpec(128, nonce)) }
 
@@ -80,7 +83,8 @@ object Format {
             val sealedWith = o["keyId"]?.jsonPrimitive?.contentOrNull
             if (sealedWith != null && key.id != null && key.id != sealedWith) throw ReaderException("This backup belongs to another account. That key cannot open it.", wrongAccount = true)
             return try {
-                String(gcm(Cipher.DECRYPT_MODE, key.bytes, ub64.decode(o["nonce"]!!.jsonPrimitive.content)).doFinal(ub64.decode(o["data"]!!.jsonPrimitive.content)))
+                val plain = gcm(Cipher.DECRYPT_MODE, key.bytes, ub64.decode(o["nonce"]!!.jsonPrimitive.content)).doFinal(ub64.decode(o["data"]!!.jsonPrimitive.content))
+                String(if (o["gzip"]?.jsonPrimitive?.boolean == true) gunzip(plain) else plain)
             } catch (e: Exception) {
                 throw ReaderException("That key does not open this backup, or the file is damaged.", wrongAccount = true)
             }
@@ -98,9 +102,9 @@ object Format {
     fun sealCore(data: String, key: AccountKey): ByteArray {
         val nonce = ByteArray(12).also(SecureRandom()::nextBytes)
         return buildJsonObject {
-            put("ember_backup", 2); put("encrypted", true); put("keyed", true); put("keyId", key.id ?: "")
+            put("ember_backup", 2); put("encrypted", true); put("keyed", true); put("keyId", key.id ?: ""); put("gzip", true)
             put("nonce", b64.encodeToString(nonce))
-            put("data", b64.encodeToString(gcm(Cipher.ENCRYPT_MODE, key.bytes, nonce).doFinal(data.toByteArray())))
+            put("data", b64.encodeToString(gcm(Cipher.ENCRYPT_MODE, key.bytes, nonce).doFinal(gzip(data.toByteArray()))))
         }.toString().toByteArray()
     }
 
@@ -151,14 +155,15 @@ class Message(val id: String, val from: String, val at: Long, val text: String, 
 class Chat(val id: String, val name: String, val kind: String, val encrypted: Boolean, val members: List<String>, val messages: List<Message>)
 
 /** An opened history archive: the chats read out of chats.json, and the files in media/ opened on demand. */
-class OpenArchive(private val zip: ZipFile, private val cipher: Format.ArchiveCipher) : AutoCloseable {
+class OpenArchive(private val zip: ZipFile, private val cipher: Format.ArchiveCipher, private val compressed: Boolean = false) : AutoCloseable {
     val chats: List<Chat>
     val skipped: List<String>
     val madeAt: Long
 
     init {
         val entry = zip.getEntry("chats.json") ?: throw ReaderException("This archive has no chats.json.")
-        val root = Json.parseToJsonElement(String(cipher.open(zip.getInputStream(entry).readBytes()))).jsonObject
+        val opened = cipher.open(zip.getInputStream(entry).readBytes())
+        val root = Json.parseToJsonElement(String(if (compressed) Format.gunzip(opened) else opened)).jsonObject
         madeAt = root["madeAt"]?.jsonPrimitive?.long ?: 0L
         skipped = root["skipped"]?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList()
         chats = (root["chats"] as? JsonArray).orEmpty().map { c ->
@@ -182,7 +187,10 @@ class OpenArchive(private val zip: ZipFile, private val cipher: Format.ArchiveCi
     }
 
     /** The bytes of an attachment, or null when the archive was made without the pictures and files. */
-    fun media(id: String): ByteArray? = zip.getEntry("media/$id")?.let { cipher.open(zip.getInputStream(it).readBytes()) }
+    fun media(id: String): ByteArray? {
+        zip.getEntry("media/$id.gz")?.let { return Format.gunzip(cipher.open(zip.getInputStream(it).readBytes())) }
+        return zip.getEntry("media/$id")?.let { cipher.open(zip.getInputStream(it).readBytes()) }
+    }
 
     override fun close() = zip.close()
 
@@ -190,7 +198,8 @@ class OpenArchive(private val zip: ZipFile, private val cipher: Format.ArchiveCi
         fun open(file: File, key: AccountKey?, passphrase: String?): OpenArchive {
             val zip = ZipFile(file)
             return try {
-                OpenArchive(zip, Format.archiveCipher(Format.archiveInfo(zip), key, passphrase))
+                val info = Format.archiveInfo(zip)
+                OpenArchive(zip, Format.archiveCipher(info, key, passphrase), info.header["compressed"]?.jsonPrimitive?.boolean == true)
             } catch (e: Throwable) { zip.close(); throw e }
         }
     }

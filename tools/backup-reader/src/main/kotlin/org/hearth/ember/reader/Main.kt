@@ -108,7 +108,7 @@ private fun pickFolder(title: String): File? {
     return if (c.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) c.selectedFile else null
 }
 
-private val dateTime = DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm").withZone(ZoneId.systemDefault())
+private val dateTime = DateTimeFormatter.ofPattern("d MMM yyyy, h:mm a").withZone(ZoneId.systemDefault())
 private fun whenOf(ms: Long) = if (ms > 0) dateTime.format(Instant.ofEpochMilli(ms)) else ""
 private fun sizeOf(n: Long) = when { n >= 1 shl 20 -> "%.1f MB".format(n / 1048576.0); n >= 1024 -> "${n / 1024} KB"; else -> "$n B" }
 

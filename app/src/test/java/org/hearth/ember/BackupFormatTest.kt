@@ -53,4 +53,11 @@ class BackupFormatTest {
     @Test fun twoBackupsOfTheSameDataDiffer() {
         assertFalse(BackupFormat.sealKeyed(data, key, "aabbccdd").contentEquals(BackupFormat.sealKeyed(data, key, "aabbccdd")))
     }
+
+    @Test fun keyedBackupsAreCompressedBeforeTheyAreSealed() {
+        val big = """{"settings":"${"x".repeat(30000)}"}"""
+        val file = BackupFormat.sealKeyed(big, key, "aabbccdd")
+        assertTrue(file.size < 6000)
+        assertEquals(big, BackupFormat.open(file, null, key, "aabbccdd"))
+    }
 }

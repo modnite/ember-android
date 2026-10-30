@@ -1,4 +1,4 @@
-import org.jetbrains.compose.desktop.application.dsl.TargetFormat
+﻿import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
 plugins {
     kotlin("jvm") version "2.0.21"
@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "org.hearth.ember"
-version = "1.0.0"
+version = "1.1.0"
 
 dependencies {
     implementation(compose.desktop.currentOs)
@@ -27,7 +27,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Dmg, TargetFormat.Deb)
             packageName = "Ember Backup Reader"
-            packageVersion = "1.0.0"
+            packageversion = "1.1.0"
             description = "Opens Ember backups on a computer. Only the account that made a backup can open it."
             vendor = "Hearth"
             windows { menuGroup = "Ember"; shortcut = true }

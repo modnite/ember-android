@@ -11,6 +11,7 @@ with windows and can sign in to your server for the key.
 """
 import base64
 import getpass
+import gzip
 import hashlib
 import json
 import os
@@ -39,10 +40,15 @@ def main() -> None:
         aes = AESGCM(key)
         opener = lambda b: aes.decrypt(b[:12], b[12:], None)
     os.makedirs(os.path.join(out, "media"), exist_ok=True)
+    compressed = bool(header.get("compressed"))
     for name in z.namelist():
         if name == "chats.json" or name.startswith("media/"):
             try:
                 data = opener(z.read(name))
+                # chats.json and media/<id>.gz were compressed before they were sealed
+                if (name == "chats.json" and compressed) or name.endswith(".gz"):
+                    data = gzip.decompress(data)
+                    name = name[:-3] if name.endswith(".gz") else name
             except Exception:
                 sys.exit("Wrong key or passphrase, or the file is damaged.")
             with open(os.path.join(out, name), "wb") as f:

@@ -1,6 +1,11 @@
 package org.hearth.ember.data
 
 import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
 import java.util.zip.Deflater
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -19,6 +24,16 @@ import org.hearth.ember.EmberApp
  * only into a sealed archive, never into a plain one.
  */
 class HistoryArchive(private val app: EmberApp) {
+    private class MediaRef(val id: String, val roomId: String, val envelope: String, val mime: String)
+
+    companion object {
+        const val PARALLEL = 4
+
+        /** Worth compressing: text and the documents that are mostly text. */
+        fun compressible(mime: String): Boolean = mime.startsWith("text/") || mime.endsWith("json") || mime.endsWith("xml") || mime.endsWith("javascript") ||
+            mime == "application/x-sh" || mime == "image/svg+xml" || mime == "image/bmp" || mime == "audio/wav" || mime == "audio/x-wav" || mime == "application/octet-stream"
+    }
+
     /** Larger files than this are left out of the copy (and listed as skipped), so a phone never runs out of memory holding one. */
     private val mediaLimit = 64L * 1024 * 1024
 
@@ -26,7 +41,7 @@ class HistoryArchive(private val app: EmberApp) {
         val rooms = app.repo.rooms.value
         val sealedOnly = !cipher.encrypted
         val chats = ArrayList<JsonObject>()
-        val media = ArrayList<Triple<String, String, String>>() // attachment id, room id, envelope
+        val media = ArrayList<MediaRef>()
         val skipped = ArrayList<String>()
         for ((i, room) in rooms.withIndex()) {
             if (room.encrypted && sealedOnly) { skipped.add("${room.title(app.store.userId)}: an end-to-end encrypted chat is not written into a plain archive. Turn encryption on to include it."); continue }
@@ -44,7 +59,7 @@ class HistoryArchive(private val app: EmberApp) {
                         put("attachments", buildJsonArray {
                             for (a in m.attachments) {
                                 add(buildJsonObject { put("id", a.id); put("filename", a.filename); put("mime", if (a.encrypted != 0) app.e2ee.mimeOf(a.envelope) ?: a.mime else a.mime); put("size", a.size) })
-                                if (withMedia && m.deletedAt == null) media.add(Triple(a.id, room.id, if (a.encrypted != 0) a.envelope else ""))
+                                if (withMedia && m.deletedAt == null) media.add(MediaRef(a.id, room.id, if (a.encrypted != 0) a.envelope else "", if (a.encrypted != 0) app.e2ee.mimeOf(a.envelope) ?: a.mime else a.mime))
                             }
                         })
                     })
@@ -56,22 +71,33 @@ class HistoryArchive(private val app: EmberApp) {
             fun put(name: String, bytes: ByteArray) { zip.putNextEntry(ZipEntry(name)); zip.write(bytes); zip.closeEntry() }
             put("archive.json", cipher.header().toString().toByteArray())
             put("README.txt", readme(cipher.encrypted).toByteArray())
+            // Four files at a time come down together (the waiting is the network's), and are written in order as each group arrives.
             var done = 0
-            for ((id, roomId, envelope) in media) {
-                done++
-                progress("Saving pictures and files ($done of ${media.size})…")
-                val bytes = runCatching {
-                    val raw = app.api.downloadAttachment(id)
-                    if (envelope.isNotEmpty()) app.e2ee.openFile(roomId, envelope, raw) else raw
-                }.getOrNull()
-                when {
-                    bytes == null -> skipped.add("$id: could not be downloaded")
-                    bytes.size > mediaLimit -> skipped.add("$id: larger than ${mediaLimit / 1024 / 1024} MB")
-                    else -> put("media/$id", cipher.seal(bytes))
+            for (group in media.chunked(PARALLEL)) {
+                val got = coroutineScope {
+                    group.map { ref ->
+                        async(Dispatchers.IO) {
+                            ref to runCatching {
+                                val raw = app.api.downloadAttachment(ref.id)
+                                if (ref.envelope.isNotEmpty()) app.e2ee.openFile(ref.roomId, ref.envelope, raw) else raw
+                            }.getOrNull()
+                        }
+                    }.awaitAll()
+                }
+                for ((ref, bytes) in got) {
+                    done++
+                    progress("Saving pictures and files ($done of ${media.size})…")
+                    when {
+                        bytes == null -> skipped.add("${ref.id}: could not be downloaded")
+                        bytes.size > mediaLimit -> skipped.add("${ref.id}: larger than ${mediaLimit / 1024 / 1024} MB")
+                        // Pictures, videos and zips are already as small as they get; text, documents and the like are not.
+                        compressible(ref.mime) -> put("media/${ref.id}.gz", cipher.seal(BackupFormat.gzip(bytes)))
+                        else -> put("media/${ref.id}", cipher.seal(bytes))
+                    }
                 }
             }
             val index = buildJsonObject { put("chats", JsonArray(chats)); put("skipped", buildJsonArray { skipped.forEach { add(JsonPrimitive(it)) } }); put("madeAt", System.currentTimeMillis()) }
-            put("chats.json", cipher.seal(index.toString().toByteArray()))
+            put("chats.json", cipher.seal(BackupFormat.gzip(index.toString().toByteArray())))
         }
     }
 
@@ -95,8 +121,8 @@ class HistoryArchive(private val app: EmberApp) {
     private fun readme(encrypted: Boolean) = buildString {
         appendLine("An Ember copy of your conversations.")
         appendLine()
-        appendLine("chats.json   every chat with its messages, as text")
-        appendLine("media/       the pictures, videos and files in the chats, named by their id (the names and types are in chats.json)")
+        appendLine("chats.json   every chat with its messages, as text (compressed with gzip, then sealed)")
+        appendLine("media/       the pictures, videos and files in the chats, named by their id (the names and types are in chats.json); a .gz name means compressed")
         appendLine("archive.json says whether the files are sealed")
         appendLine()
         if (encrypted) {

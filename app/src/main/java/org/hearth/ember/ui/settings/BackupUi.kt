@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Cloud
@@ -279,20 +280,13 @@ fun BackupRows() {
                         RadioButton(selected = settings.schedule == s, onClick = { settings.schedule = s; reschedule() })
                         Text(s.label)
                     }
-                    // The hour, chosen from twelve buttons and AM or PM: no clock face, no minutes.
-                    Text("Time: ${clock(settings.atMinute)}", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 12.dp, bottom = 6.dp))
-                    val pm = settings.atMinute / 60 >= 12
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        for ((label, isPm) in listOf("AM" to false, "PM" to true)) androidx.compose.material3.FilterChip(
-                            selected = pm == isPm, onClick = { settings.atMinute = ((settings.atMinute / 60) % 12 + if (isPm) 12 else 0) * 60; reschedule() }, label = { Text(label) },
-                        )
-                    }
-                    Spacer(Modifier.height(6.dp))
-                    for (rowStart in listOf(1, 5, 9)) Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 2.dp)) {
-                        for (hour12 in rowStart until rowStart + 4) androidx.compose.material3.FilterChip(
-                            selected = (settings.atMinute / 60) % 12 == hour12 % 12, onClick = { settings.atMinute = (hour12 % 12 + if (pm) 12 else 0) * 60; reschedule() },
-                            label = { Text(hour12.toString(), Modifier.width(22.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center) },
-                        )
+                    // The time of day: one row, an hour at a time (3 AM, 4 AM, ... 12 PM, 1 PM ...). No clock face, no minutes.
+                    Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Time", Modifier.weight(1f))
+                        val hour = settings.atMinute / 60
+                        TextButton(onClick = { settings.atMinute = ((hour + 23) % 24) * 60; reschedule() }) { Text("−") }
+                        Text(clock(settings.atMinute), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.widthIn(min = 64.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                        TextButton(onClick = { settings.atMinute = ((hour + 1) % 24) * 60; reschedule() }) { Text("+") }
                     }
                     Text("Android may run it a little later when the phone is asleep.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp, bottom = 4.dp))
                     Row(Modifier.fillMaxWidth().clickable { settings.wifiOnly = !settings.wifiOnly; reschedule() }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {

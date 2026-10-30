@@ -106,6 +106,29 @@ class FormatTest {
         ZipFile(zipFile).use { assertTrue(Format.archiveInfo(it).keyed) }
     }
 
+    @Test fun aCompressedArchiveAndACompressedBackupOpen() {
+        val big = "x".repeat(20000)
+        val file = Format.sealCore("""{"data":"$big"}""", mine)
+        assertTrue(file.size < 5000) // sealed after compression, so it stays small
+        assertEquals("""{"data":"$big"}""", Format.openCore(file, mine, null))
+
+        val cipher = Format.ArchiveCipher(mine.bytes)
+        val chats = """{"madeAt":1,"skipped":[],"chats":[{"id":"r1","name":"Alex","kind":"direct","encrypted":false,"members":[],"messages":[{"id":"m1","from":"A","at":1,"text":"hi","attachments":[{"id":"a1","filename":"n.txt","mime":"text/plain","size":5},{"id":"a2","filename":"p.png","mime":"image/png","size":3}]}]}]}"""
+        val zipFile = File.createTempFile("archive2", ".zip").also { it.deleteOnExit() }
+        ZipOutputStream(zipFile.outputStream()).use { z ->
+            fun put(n: String, b: ByteArray) { z.putNextEntry(ZipEntry(n)); z.write(b); z.closeEntry() }
+            put("archive.json", """{"ember_archive":1,"encrypted":true,"keyed":true,"keyId":"${mine.id}","compressed":true}""".toByteArray())
+            put("chats.json", cipher.seal(Format.gzip(chats.toByteArray())))
+            put("media/a1.gz", cipher.seal(Format.gzip("hello".toByteArray())))
+            put("media/a2", cipher.seal(byteArrayOf(9, 8, 7)))
+        }
+        OpenArchive.open(zipFile, mine, null).use { a ->
+            assertEquals("hi", a.chats[0].messages[0].text)
+            assertContentEquals("hello".toByteArray(), a.media("a1"))
+            assertContentEquals(byteArrayOf(9, 8, 7), a.media("a2"))
+        }
+    }
+
     @Test fun serverAddressesAreTidied() {
         assertEquals("https://chat.example.com", Account.normalize("chat.example.com/"))
         assertEquals("https://chat.example.com", Account.normalize("http://chat.example.com"))

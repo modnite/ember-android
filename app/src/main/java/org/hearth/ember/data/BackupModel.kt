@@ -87,6 +87,8 @@ class ArchiveCipher private constructor(private val key: SecretKeySpec?, private
         put("encrypted", encrypted)
         if (salt != null) { put("rounds", BackupFormat.ROUNDS); put("salt", java.util.Base64.getEncoder().encodeToString(salt)) }
         if (keyId != null) { put("keyed", true); put("keyId", keyId) }
+        // chats.json (and text files, named media/<id>.gz) are compressed before they are sealed.
+        put("compressed", true)
     }
 
     fun seal(data: ByteArray): ByteArray {
@@ -185,6 +187,11 @@ class BackupSettings(context: Context) {
     var wifiOnly: Boolean
         get() = prefs.getBoolean("wifiOnly", true)
         set(v) { prefs.edit().putBoolean("wifiOnly", v).apply(); changed() }
+
+    /** What the chats looked like when the last complete archive was made (see BackupService), so an unchanged day costs nothing. */
+    var archiveStamp: String
+        get() = prefs.getString("archiveStamp", "") ?: ""
+        set(v) { prefs.edit().putString("archiveStamp", v).apply() }
 
     var keep: Int
         get() = prefs.getInt("keep", 5).coerceIn(1, 30)

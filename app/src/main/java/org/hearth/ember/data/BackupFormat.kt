@@ -37,11 +37,16 @@ object BackupFormat {
     fun sealKeyed(data: String, key: ByteArray, keyId: String): ByteArray {
         val nonce = ByteArray(12).also(SecureRandom()::nextBytes)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, SecretKeySpec(key, "AES"), GCMParameterSpec(128, nonce)) }
+        // Compressed first (sealed data cannot be compressed afterwards): the settings and the stickers' text form shrink to about a third.
         return buildJsonObject {
-            put("ember_backup", 2); put("encrypted", true); put("keyed", true); put("keyId", keyId)
-            put("nonce", b64.encodeToString(nonce)); put("data", b64.encodeToString(cipher.doFinal(data.toByteArray())))
+            put("ember_backup", 2); put("encrypted", true); put("keyed", true); put("keyId", keyId); put("gzip", true)
+            put("nonce", b64.encodeToString(nonce)); put("data", b64.encodeToString(cipher.doFinal(gzip(data.toByteArray()))))
         }.toString().toByteArray()
     }
+
+    fun gzip(bytes: ByteArray): ByteArray = java.io.ByteArrayOutputStream().also { out -> java.util.zip.GZIPOutputStream(out).use { it.write(bytes) } }.toByteArray()
+
+    fun gunzip(bytes: ByteArray): ByteArray = java.util.zip.GZIPInputStream(bytes.inputStream()).use { it.readBytes() }
 
     /** Which key sealed this file, or null for the older kinds. */
     fun keyIdOf(file: ByteArray): String? = parse(file)["keyId"]?.jsonPrimitive?.content
@@ -83,7 +88,8 @@ object BackupFormat {
             return try {
                 val nonce = ub64.decode(obj["nonce"]!!.jsonPrimitive.content)
                 val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.DECRYPT_MODE, SecretKeySpec(key, "AES"), GCMParameterSpec(128, nonce)) }
-                String(cipher.doFinal(ub64.decode(obj["data"]!!.jsonPrimitive.content)))
+                val plain = cipher.doFinal(ub64.decode(obj["data"]!!.jsonPrimitive.content))
+                String(if (obj["gzip"]?.jsonPrimitive?.boolean == true) gunzip(plain) else plain)
             } catch (e: Exception) {
                 throw BackupException("This backup could not be opened: the key is not the one that sealed it, or the file is damaged.")
             }

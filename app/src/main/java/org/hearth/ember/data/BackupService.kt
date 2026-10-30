@@ -105,24 +105,37 @@ class BackupService(private val app: EmberApp, private val context: Context) {
         try {
             progress("Preparing…")
             val core = File(dir, BackupNames.core(now)).also { it.writeBytes(make(key)) }
-            val archive = if (settings.includeHistory) File(dir, BackupNames.archive(now)).also {
+            // The archive is the big one. When no chat has anything new since the last complete one (and a week has not gone by) it is not made again.
+            val stamp = archiveStamp()
+            val unchanged = settings.includeHistory && stamp == settings.archiveStamp && stamp.isNotEmpty() && settings.lastRuns.values.all { it.ok }
+            val archive = if (settings.includeHistory && !unchanged) File(dir, BackupNames.archive(now)).also {
                 HistoryArchive(app).build(it, ArchiveCipher.keyed(key.bytes, key.id), settings.includeMedia, progress)
             } else null
-            destinations.map { d ->
+            val results = destinations.map { d ->
                 val run = runCatching {
                     progress("Saving to ${d.label}…")
                     val t = target(d)
                     t.put(core.name, core)
                     archive?.let { t.put(it.name, it) }
                     prune(t)
-                    BackupRun(now, true, "Backed up", core.length() + (archive?.length() ?: 0L))
+                    BackupRun(now, true, if (unchanged) "Backed up (chats unchanged)" else "Backed up", core.length() + (archive?.length() ?: 0L))
                 }.getOrElse { BackupRun(now, false, it.message ?: "The backup failed.") }
                 settings.record(d.id, run)
                 d to run
             }
+            if (archive != null && results.all { it.second.ok }) settings.archiveStamp = stamp
+            results
         } finally {
             dir.listFiles()?.forEach { it.delete() }
         }
+    }
+
+    /** A fingerprint of the chats: each one's newest message, the week, and whether files are included. A change of any of them means a new archive. */
+    internal fun archiveStamp(): String {
+        val rooms = app.repo.rooms.value.sortedBy { it.id }
+        val text = rooms.joinToString("|") { r -> "${r.id}:${r.lastMessage?.id}:${r.lastMessage?.editedAt}:${r.lastMessage?.deletedAt}:${r.members.size}" } +
+            "#${settings.includeMedia}#${System.currentTimeMillis() / (7L * 24 * 3600 * 1000)}"
+        return java.security.MessageDigest.getInstance("SHA-256").digest(text.toByteArray()).joinToString("") { "%02x".format(it) }.take(24)
     }
 
     /** Keep only the newest few of each kind of file in a destination. */
