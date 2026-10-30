@@ -84,7 +84,7 @@ private fun whenOf(e: RemoteEntry): String {
     val ms = if (e.modified > 0) e.modified else runCatching {
         SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).parse(e.name.removePrefix(BackupNames.CORE_PREFIX).take(13))?.time
     }.getOrNull() ?: 0L
-    return if (ms > 0) SimpleDateFormat("d MMM yyyy, HH:mm", Locale.getDefault()).format(Date(ms)) else e.name
+    return if (ms > 0) SimpleDateFormat("d MMM yyyy, h:mm a", Locale.getDefault()).format(Date(ms)) else e.name
 }
 
 private fun ago(ms: Long): String {
@@ -97,7 +97,14 @@ private fun ago(ms: Long): String {
     }
 }
 
-private fun clock(minute: Int) = "%02d:%02d".format(minute / 60, minute % 60)
+/** 12-hour time with AM or PM, minutes only when there are some ("3 AM", "9:30 PM"). */
+private fun clock(minute: Int): String {
+    val h = minute / 60
+    val m = minute % 60
+    val h12 = if (h % 12 == 0) 12 else h % 12
+    val ampm = if (h < 12) "AM" else "PM"
+    return if (m == 0) "$h12 $ampm" else "%d:%02d %s".format(h12, m, ampm)
+}
 
 /**
  * Backup and restore. A backup holds your encryption key, your settings and your stickers (and, if you ask, a readable copy of your chats and
@@ -272,15 +279,22 @@ fun BackupRows() {
                         RadioButton(selected = settings.schedule == s, onClick = { settings.schedule = s; reschedule() })
                         Text(s.label)
                     }
-                    Row(Modifier.fillMaxWidth().clickable {
-                        android.app.TimePickerDialog(context, { _, h, m -> settings.atMinute = h * 60 + m; reschedule() }, settings.atMinute / 60, settings.atMinute % 60, true).show()
-                    }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text("At")
-                            Text("Android may run it a little later when the phone is asleep.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        Text(clock(settings.atMinute), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                    // The hour, chosen from twelve buttons and AM or PM: no clock face, no minutes.
+                    Text("Time: ${clock(settings.atMinute)}", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 12.dp, bottom = 6.dp))
+                    val pm = settings.atMinute / 60 >= 12
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        for ((label, isPm) in listOf("AM" to false, "PM" to true)) androidx.compose.material3.FilterChip(
+                            selected = pm == isPm, onClick = { settings.atMinute = ((settings.atMinute / 60) % 12 + if (isPm) 12 else 0) * 60; reschedule() }, label = { Text(label) },
+                        )
                     }
+                    Spacer(Modifier.height(6.dp))
+                    for (rowStart in listOf(1, 5, 9)) Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 2.dp)) {
+                        for (hour12 in rowStart until rowStart + 4) androidx.compose.material3.FilterChip(
+                            selected = (settings.atMinute / 60) % 12 == hour12 % 12, onClick = { settings.atMinute = (hour12 % 12 + if (pm) 12 else 0) * 60; reschedule() },
+                            label = { Text(hour12.toString(), Modifier.width(22.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center) },
+                        )
+                    }
+                    Text("Android may run it a little later when the phone is asleep.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp, bottom = 4.dp))
                     Row(Modifier.fillMaxWidth().clickable { settings.wifiOnly = !settings.wifiOnly; reschedule() }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text("Only on Wi-Fi", Modifier.weight(1f))
                         androidx.compose.material3.Switch(settings.wifiOnly, { settings.wifiOnly = it; reschedule() })
