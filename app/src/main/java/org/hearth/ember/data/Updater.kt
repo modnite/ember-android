@@ -86,9 +86,9 @@ class Updater(private val context: Context, private val client: OkHttpClient, pr
         }
     }
 
-    /** A check at most about twice a day, quietly. */
+    /** A check when the app is opened, at most once an hour (what the background job does too), quietly. */
     suspend fun checkIfDue() {
-        if (System.currentTimeMillis() - prefs.getLong("checkedAt", 0) > 12 * 3600_000L) check()
+        if (System.currentTimeMillis() - prefs.getLong("checkedAt", 0) > 55 * 60_000L) check()
     }
 
     /** Download the update, reporting how far along it is (0 to 1). */

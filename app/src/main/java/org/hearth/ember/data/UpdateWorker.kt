@@ -23,7 +23,7 @@ import org.hearth.ember.ember
 import org.hearth.ember.notify.Notifier
 
 /**
- * Looks for a newer Ember about twice a day while the app is closed, and says so in a notification (once per version) that opens the update.
+ * Looks for a newer Ember about once an hour while the app is closed, and says so in a notification (once per version) that opens the update.
  * Switch it off under Settings, "Tell me about updates".
  */
 class UpdateWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
@@ -40,12 +40,12 @@ class UpdateWorker(context: Context, params: WorkerParameters) : CoroutineWorker
     companion object {
         private const val NAME = "ember-update-check"
 
-        /** Twice a day, on any network, kept as it is if already scheduled. */
+        /** Every hour, on any network. An older schedule (12 hours, before 0.9.7) is replaced by this one. */
         fun schedule(context: Context) {
-            val request = PeriodicWorkRequestBuilder<UpdateWorker>(12, TimeUnit.HOURS)
+            val request = PeriodicWorkRequestBuilder<UpdateWorker>(1, TimeUnit.HOURS)
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .build()
-            WorkManager.getInstance(context).enqueueUniquePeriodicWork(NAME, ExistingPeriodicWorkPolicy.KEEP, request)
+            WorkManager.getInstance(context).enqueueUniquePeriodicWork(NAME, ExistingPeriodicWorkPolicy.UPDATE, request)
         }
     }
 }
