@@ -297,6 +297,8 @@ private fun ChatsPage() {
     val soundsOn by app.prefs.soundsOn.collectAsState()
             ToggleRow(Icons.Filled.Keyboard, "Enter sends", "Use the Enter key to send instead of adding a new line", enterSends) { app.prefs.setEnterSends(it) }
     ToggleRow(Icons.Filled.Notifications, "Chat sounds", "Small sounds in a chat for messages arriving, sending and typing", soundsOn) { on -> app.prefs.setSoundsOn(on) }
+    val spellCheck by app.prefs.spellCheck.collectAsState()
+    ToggleRow(Icons.Filled.Keyboard, "Check spelling", "Underline misspelt words in the message box", spellCheck) { on -> app.prefs.setSpellCheck(on) }
     val sendHd by app.prefs.sendHd.collectAsState()
     ToggleRow(Icons.Filled.PhotoLibrary, "Send photos and videos in HD", "Sharper and larger. Off sends a smaller copy that arrives faster.", sendHd) { on -> app.prefs.setSendHd(on) }
     val nudgeButton by app.prefs.nudgeButton.collectAsState()

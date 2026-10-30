@@ -99,6 +99,11 @@ class Prefs(context: Context) {
     val sendHd: StateFlow<Boolean> = _sendHd.asStateFlow()
     fun setSendHd(on: Boolean) { p.edit().putBoolean("sendHd", on).apply(); _sendHd.value = on }
 
+    /** Underline misspelt words in the message box (through the phone's own spell checker). */
+    private val _spellCheck = MutableStateFlow(p.getBoolean("spellCheck", true))
+    val spellCheck: StateFlow<Boolean> = _spellCheck.asStateFlow()
+    fun setSpellCheck(on: Boolean) { p.edit().putBoolean("spellCheck", on).apply(); _spellCheck.value = on }
+
     /** A small floating nudge button over the chat (the nudge is also in the paperclip menu). */
     private val _nudgeButton = MutableStateFlow(p.getBoolean("nudgeButton", true))
     val nudgeButton: StateFlow<Boolean> = _nudgeButton.asStateFlow()

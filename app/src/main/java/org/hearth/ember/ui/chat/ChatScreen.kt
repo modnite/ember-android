@@ -1,5 +1,8 @@
 package org.hearth.ember.ui.chat
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.foundation.layout.statusBarsPadding
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -655,11 +658,34 @@ private fun Composer(
     fieldFocus: androidx.compose.ui.focus.FocusRequester, onFieldFocused: () -> Unit, bottomInset: Boolean, panelOpen: Boolean,
 ) {
     var cameraMenu by remember { mutableStateOf(false) }
+    // The box keeps its own cursor (the chat only holds the words) so a suggestion can be put in at the right place.
+    var tfv by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(text)) }
+    if (tfv.text != text) tfv = androidx.compose.ui.text.input.TextFieldValue(text, androidx.compose.ui.text.TextRange(text.length))
+    var layout by remember { mutableStateOf<androidx.compose.ui.text.TextLayoutResult?>(null) }
+    val context = LocalContext.current
+    val spellOn by context.ember.prefs.spellCheck.collectAsState()
+    val checker = remember { SpellChecker(context) }
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { checker.close() } }
+    var errors by remember { mutableStateOf<List<SpellError>>(emptyList()) }
+    androidx.compose.runtime.LaunchedEffect(text, spellOn) {
+        if (!spellOn) { errors = emptyList(); return@LaunchedEffect }
+        kotlinx.coroutines.delay(350) // not on every key
+        errors = checker.check(text)
+    }
+    val errorColor = MaterialTheme.colorScheme.error
+    val here = if (spellOn && tfv.selection.collapsed) SpellChecker.at(errors, tfv.selection.start) else null
     val compact = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp < 500
     val buttonHeight = if (compact) 44.dp else 56.dp
     val nudgeButton by LocalContext.current.ember.prefs.nudgeButton.collectAsState()
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    Row(Modifier.widthIn(max = 880.dp).fillMaxWidth().then(if (bottomInset) Modifier.navigationBarsPadding() else Modifier).padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.Bottom) {
+    Column(Modifier.widthIn(max = 880.dp).fillMaxWidth()) {
+    if (here != null && here.suggestions.isNotEmpty()) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        for (suggestion in here.suggestions) androidx.compose.material3.SuggestionChip(
+            onClick = { val (t, cursor) = SpellChecker.apply(text, here, suggestion); tfv = androidx.compose.ui.text.input.TextFieldValue(t, androidx.compose.ui.text.TextRange(cursor)); onText(t) },
+            label = { Text(suggestion) },
+        )
+    }
+    Row(Modifier.fillMaxWidth().then(if (bottomInset) Modifier.navigationBarsPadding() else Modifier).padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.Bottom) {
         Surface(shape = RoundedCornerShape(26.dp), color = MaterialTheme.colorScheme.surface, shadowElevation = 1.dp, modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.Bottom) {
                 // Emoji, stickers and GIFs live behind the face at the left, as in the messengers you know.
@@ -672,38 +698,32 @@ private fun Composer(
                         onSend(); true
                     } else false
                 }
-                val options = KeyboardOptions(imeAction = if (enterSends) ImeAction.Send else ImeAction.Default, capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Sentences)
+                val options = KeyboardOptions(imeAction = if (enterSends) ImeAction.Send else ImeAction.Default, capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Sentences, autoCorrectEnabled = true)
                 val actions = androidx.compose.foundation.text.KeyboardActions(onSend = { onSend() })
-                if (compact) {
-                    // Sideways with the keyboard up there is barely room for one line: the same field with less padding, so the text is never cut.
-                    androidx.compose.foundation.text.BasicTextField(
-                        value = text, onValueChange = onText, modifier = fieldModifier, maxLines = 6,
-                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
-                        cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
-                        keyboardOptions = options, keyboardActions = actions,
-                        decorationBox = { inner ->
-                            TextFieldDefaults.DecorationBox(
-                                value = text, innerTextField = inner, enabled = true, singleLine = false,
-                                visualTransformation = androidx.compose.ui.text.input.VisualTransformation.None,
-                                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                                placeholder = { org.hearth.ember.ui.components.PlaceholderText("Message") },
-                                colors = TextFieldDefaults.colors(
-                                    focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent,
-                                    focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
-                                ),
-                                contentPadding = TextFieldDefaults.contentPaddingWithoutLabel(top = 8.dp, bottom = 8.dp),
-                            )
-                        },
-                    )
-                } else TextField(
-                    value = text, onValueChange = onText, placeholder = { org.hearth.ember.ui.components.PlaceholderText("Message") },
-                    modifier = fieldModifier,
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent,
-                        focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
-                    ),
+                androidx.compose.foundation.text.BasicTextField(
+                    value = tfv, modifier = fieldModifier, maxLines = 6,
+                    onValueChange = { tfv = it; if (it.text != text) onText(it.text) },
+                    onTextLayout = { layout = it },
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                    cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
                     keyboardOptions = options, keyboardActions = actions,
-                    maxLines = 6,
+                    decorationBox = { inner ->
+                        TextFieldDefaults.DecorationBox(
+                            value = tfv.text,
+                            // The squiggles are drawn under the text itself, so they line up with it at any size.
+                            innerTextField = { Box(Modifier.drawBehind { drawSpellErrors(layout, errors, errorColor) }) { inner() } },
+                            enabled = true, singleLine = false,
+                            visualTransformation = androidx.compose.ui.text.input.VisualTransformation.None,
+                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                            placeholder = { org.hearth.ember.ui.components.PlaceholderText("Message") },
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent,
+                                focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
+                            ),
+                            // Sideways with the keyboard up there is barely room for one line: less padding, so the text is never cut.
+                            contentPadding = if (compact) TextFieldDefaults.contentPaddingWithoutLabel(top = 8.dp, bottom = 8.dp) else TextFieldDefaults.contentPaddingWithoutLabel(),
+                        )
+                    },
                 )
                 Box {
                     IconButton(onClick = { onAttachMenu(true) }, modifier = Modifier.size(width = 44.dp, height = buttonHeight)) { Icon(Icons.Filled.AttachFile, "Attach", tint = muted) }
@@ -733,6 +753,7 @@ private fun Composer(
             // Nothing typed: the button is the microphone. Something typed: it sends.
             Icon(if (hasText) Icons.AutoMirrored.Filled.Send else Icons.Filled.Mic, if (hasText) "Send" else "Record a voice message", tint = MaterialTheme.colorScheme.onPrimary)
         }
+    }
     }
 }
 
