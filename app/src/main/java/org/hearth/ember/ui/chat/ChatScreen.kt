@@ -655,7 +655,7 @@ private fun Composer(
         Surface(shape = RoundedCornerShape(26.dp), color = MaterialTheme.colorScheme.surface, shadowElevation = 1.dp, modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.Bottom) {
                 // Emoji, stickers and GIFs live behind the face at the left, as in the messengers you know.
-                IconButton(onClick = onEmoji, modifier = Modifier.size(44.dp)) {
+                IconButton(onClick = onEmoji, modifier = Modifier.size(width = 44.dp, height = 56.dp)) {
                     Icon(if (panelOpen) Icons.Filled.Keyboard else Icons.Filled.EmojiEmotions, if (panelOpen) "Keyboard" else "Emoji, stickers and GIFs", tint = muted)
                 }
                 TextField(
@@ -675,7 +675,7 @@ private fun Composer(
                     maxLines = 6,
                 )
                 Box {
-                    IconButton(onClick = { onAttachMenu(true) }, modifier = Modifier.size(44.dp)) { Icon(Icons.Filled.AttachFile, "Attach", tint = muted) }
+                    IconButton(onClick = { onAttachMenu(true) }, modifier = Modifier.size(width = 44.dp, height = 56.dp)) { Icon(Icons.Filled.AttachFile, "Attach", tint = muted) }
                     DropdownMenu(expanded = attachMenu, onDismissRequest = { onAttachMenu(false) }) {
                         DropdownMenuItem(text = { Text("Photos and videos") }, leadingIcon = { Icon(Icons.Filled.PhotoLibrary, null) }, onClick = onPhoto)
                         DropdownMenuItem(text = { Text("File") }, leadingIcon = { Icon(Icons.Filled.AttachFile, null) }, onClick = onFile)
@@ -685,7 +685,7 @@ private fun Composer(
                 }
                 // Nothing typed yet: the camera sits in the field, a thumb away.
                 if (text.isBlank()) Box {
-                    IconButton(onClick = { cameraMenu = true }, modifier = Modifier.size(44.dp)) { Icon(Icons.Filled.PhotoCamera, "Camera", tint = muted) }
+                    IconButton(onClick = { cameraMenu = true }, modifier = Modifier.size(width = 44.dp, height = 56.dp)) { Icon(Icons.Filled.PhotoCamera, "Camera", tint = muted) }
                     DropdownMenu(expanded = cameraMenu, onDismissRequest = { cameraMenu = false }) {
                         DropdownMenuItem(text = { Text("Take a photo") }, leadingIcon = { Icon(Icons.Filled.PhotoCamera, null) }, onClick = { cameraMenu = false; onCamera(false) })
                         DropdownMenuItem(text = { Text("Record a video") }, leadingIcon = { Icon(Icons.Filled.Videocam, null) }, onClick = { cameraMenu = false; onCamera(true) })
