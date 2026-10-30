@@ -24,7 +24,7 @@ import org.hearth.ember.notify.Notifier
 
 /**
  * Looks for a newer Ember about once an hour while the app is closed, and says so in a notification (once per version) that opens the update.
- * Switch it off under Settings, "Tell me about updates".
+ * Switch it off under Notifications and sounds, "Tell me about updates".
  */
 class UpdateWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {

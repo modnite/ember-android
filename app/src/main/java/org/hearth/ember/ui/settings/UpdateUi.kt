@@ -57,8 +57,14 @@ fun UpdateRow() {
         }
     }
     if (show) available?.let { UpdateDialog(it) { show = false } }
+}
+
+/** The switch for update notifications; it lives with the other notification settings. */
+@Composable
+fun UpdateNotifyRow() {
+    val app = LocalContext.current.ember
     var tell by remember { mutableStateOf(app.updater.notifyEnabled) }
-    ToggleRow(Icons.Filled.Notifications, "Tell me about updates", "A notification when a newer Ember is ready, even if the app is closed.", tell) { tell = it; app.updater.notifyEnabled = it }
+    ToggleRow(Icons.Filled.Notifications, "Tell me about updates", "A notification when a newer Ember is ready", tell) { tell = it; app.updater.notifyEnabled = it }
 }
 
 /** What an update offers: its notes, a download with progress, then Android's own installer. */

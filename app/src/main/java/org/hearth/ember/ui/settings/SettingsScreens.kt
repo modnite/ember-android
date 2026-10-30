@@ -201,6 +201,7 @@ private fun NotificationsPage() {
                 instant,
             ) { app.prefs.setInstantDelivery(it); Delivery.apply(app) }
             if (notifications) ToggleRow(Icons.Filled.Visibility, "Show message text", "Off shows only “New message” on the lock screen", previews) { app.prefs.setPreviews(it) }
+            UpdateNotifyRow()
             if (notifications) ActionRow(Icons.Filled.BatteryChargingFull, "Battery", "Let Ember run without being put to sleep") {
                 val pm = context.getSystemService(PowerManager::class.java)
                 val intent = if (pm.isIgnoringBatteryOptimizations(context.packageName)) Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
