@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -129,30 +130,33 @@ fun FirstLoginRestore(password: String, onClose: () -> Unit) {
         return
     }
 
-    // The text and the buttons share one scrolling body: at a big text size or sideways, no button is ever cut off below the dialog.
+    // Short text, and the buttons in the dialog's own button row (which wraps), so nothing is ever cut off, sideways or at a big text size.
     AlertDialog(
         onDismissRequest = { finish() },
         title = { Text(if (found != null) "Restore your backup?" else "Restore a backup?") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 when {
-                    checking -> Text("Looking for a backup of this account on this server…", style = MaterialTheme.typography.bodyMedium)
+                    checking -> Text("Looking for a backup…", style = MaterialTheme.typography.bodyMedium)
                     found != null -> Text(
-                        "This account has a backup on this server from ${DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(found!!.second.modified))}. Restoring brings back your encryption key and settings, so your encrypted chats open.",
+                        "Backup from ${DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(found!!.second.modified))}.",
                         style = MaterialTheme.typography.bodyMedium,
                     )
-                    else -> Text("No backup of this account was found on this server. If you have one somewhere else, you can restore it from a file, a folder, a cloud drive or your own server. Your encryption key and settings come back, so encrypted chats open.", style = MaterialTheme.typography.bodyMedium)
+                    else -> Text("No backup on this server.", style = MaterialTheme.typography.bodyMedium)
                 }
                 ActivityLine()
-                androidx.compose.foundation.layout.Spacer(Modifier.padding(top = 8.dp))
-                if (found != null) {
-                    TextButton(onClick = { restore(found!!.first, found!!.second) }, modifier = Modifier.fillMaxWidth()) { Text("Restore") }
-                    TextButton(onClick = { choosing = true }, modifier = Modifier.fillMaxWidth()) { Text("Another source") }
-                } else TextButton(enabled = !checking, onClick = { choosing = true }, modifier = Modifier.fillMaxWidth()) { Text("Choose a source") }
-                TextButton(onClick = { finish() }, modifier = Modifier.fillMaxWidth()) { Text("Not now") }
             }
         },
-        confirmButton = {},
+        confirmButton = {
+            if (found != null) TextButton(onClick = { restore(found!!.first, found!!.second) }) { Text("Restore") }
+            else TextButton(enabled = !checking, onClick = { choosing = true }) { Text("Choose a source") }
+        },
+        dismissButton = {
+            Row {
+                if (found != null) TextButton(onClick = { choosing = true }) { Text("Another source") }
+                TextButton(onClick = { finish() }) { Text("Not now") }
+            }
+        },
     )
 }
 

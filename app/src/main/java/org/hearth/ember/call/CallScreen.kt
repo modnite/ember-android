@@ -245,10 +245,11 @@ fun VideoView(room: Room?, track: VideoTrack?, modifier: Modifier = Modifier, mi
 @Composable
 private fun Lobby(controller: CallController, state: CallState, answering: Boolean, onClose: () -> Unit) {
     val landscape = androidx.compose.ui.platform.LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+    val mirrorSelf by LocalContext.current.ember.prefs.mirrorSelfPicture.collectAsState()
     val preview: @Composable (Modifier) -> Unit = { m ->
         Box(m.clip(RoundedCornerShape(24.dp)).background(Color(0xFF241C18)), contentAlignment = Alignment.Center) {
             if (state.camOn && state.preview != null) {
-                VideoView(controller.room, state.preview, Modifier.fillMaxSize(), mirror = state.lens?.front == true)
+                VideoView(controller.room, state.preview, Modifier.fillMaxSize(), mirror = mirrorSelf && state.lens?.front == true)
             } else {
                 Icon(Icons.Filled.VideocamOff, null, tint = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(56.dp))
             }
@@ -618,6 +619,7 @@ private fun Grid(controller: CallController, people: List<CallPerson>, landscape
 @Composable
 private fun PersonTile(controller: CallController, p: CallPerson, modifier: Modifier, big: Boolean, ring: Boolean = false, forceFit: Boolean = false) {
     val app = LocalContext.current.ember
+    val mirrorSelf by app.prefs.mirrorSelfPicture.collectAsState()
     val user = app.repo.users.collectAsState().value[p.userId]
     val speaking = p.speaking && p.micOn
     var ratio by remember(p.identity) { mutableStateOf(controller.knownRatio(p.identity)) }
@@ -645,7 +647,7 @@ private fun PersonTile(controller: CallController, p: CallPerson, modifier: Modi
                 key(track) {
                     VideoView(
                         controller.room, track, shape,
-                        mirror = p.isLocal && controller.state.value.lens?.front == true, fill = !showFit,
+                        mirror = mirrorSelf && p.isLocal && controller.state.value.lens?.front == true, fill = !showFit,
                         onRatio = { ratio = it; android.util.Log.i("Call", "picture of ${p.name} is ${"%.2f".format(it)} wide over high"); controller.noteFrame(p.identity, it) },
                     )
                 }

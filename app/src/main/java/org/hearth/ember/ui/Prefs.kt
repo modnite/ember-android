@@ -109,6 +109,22 @@ class Prefs(context: Context) {
     val lowBatteryAlerts: StateFlow<Boolean> = _lowBattery.asStateFlow()
     fun setLowBatteryAlerts(on: Boolean) { p.edit().putBoolean("lowBatteryAlerts", on).apply(); _lowBattery.value = on }
 
+    /**
+     * Some phones (Samsung's) hand the app a front camera picture that is already flipped like a selfie preview. Sent as it is, the people in
+     * the call see a mirror image of you (writing backwards), and Ember's own mirroring of your preview turns it back to normal. With this on,
+     * the picture is flipped once before it is sent, so others see you as you are and your own preview still looks like a mirror.
+     */
+    private val _flipFront = MutableStateFlow(
+        if (p.contains("flipFrontCamera")) p.getBoolean("flipFrontCamera", false) else android.os.Build.MANUFACTURER.equals("samsung", ignoreCase = true),
+    )
+    val flipFrontCamera: StateFlow<Boolean> = _flipFront.asStateFlow()
+    fun setFlipFrontCamera(on: Boolean) { p.edit().putBoolean("flipFrontCamera", on).apply(); _flipFront.value = on }
+
+    /** See my own front camera picture like a mirror (on unless switched off). Others always see me as I am. */
+    private val _mirrorSelf = MutableStateFlow(p.getBoolean("mirrorSelfPicture", true))
+    val mirrorSelfPicture: StateFlow<Boolean> = _mirrorSelf.asStateFlow()
+    fun setMirrorSelfPicture(on: Boolean) { p.edit().putBoolean("mirrorSelfPicture", on).apply(); _mirrorSelf.value = on }
+
     /** Send crash reports to my Hearth server so they can be looked at and fixed. */
     private val _crashReports = MutableStateFlow(p.getBoolean("crashReports", true))
     val crashReports: StateFlow<Boolean> = _crashReports.asStateFlow()

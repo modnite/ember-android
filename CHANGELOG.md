@@ -2,6 +2,11 @@
 
 One entry per release. All dates are 2026.
 
+## 1.1.1 (30 Oct)
+- Samsung front cameras deliver an already flipped picture. Others saw you mirrored (writing backwards) and your own preview looked wrong. The picture is now flipped once before it is sent, so others see you as you are (writing reads the right way round). Settings, Chats and calls, Flip front camera for others is on by default for Samsung.
+- Mirror my own picture (Settings, Chats and calls): on by default, you see yourself like in a mirror. Switch it off to see the picture as others see it.
+- The restore offer after the first sign-in has shorter text and its buttons are always visible, also in landscape.
+
 ## 1.1.0 (30 Oct)
 - Low battery in calls: a warning at 20, 15, 10 and 5 percent (notification and banner, plug in and use a fast charger), and the others in the call are told. Switch under Notifications and sounds.
 - Crash reports are sent to your Hearth server at the next start. Switch under Chats and calls.

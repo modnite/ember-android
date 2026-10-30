@@ -30,6 +30,7 @@ import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.BatteryAlert
 import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.BugReport
+import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.DarkMode
@@ -328,6 +329,10 @@ private fun ChatsPage() {
     spellReport?.let { text ->
         AlertDialog(onDismissRequest = { spellReport = null }, title = { Text("Spell checking") }, text = { Text(text) }, confirmButton = { TextButton(onClick = { spellReport = null }) { Text("Close") } })
     }
+    val mirrorSelf by app.prefs.mirrorSelfPicture.collectAsState()
+    ToggleRow(Icons.Filled.Cameraswitch, "Mirror my own picture", "You see yourself like in a mirror. Others see you as you are.", mirrorSelf) { on -> app.prefs.setMirrorSelfPicture(on) }
+    val flipFront by app.prefs.flipFrontCamera.collectAsState()
+    ToggleRow(Icons.Filled.Cameraswitch, "Flip front camera for others", "On if people see you mirrored, with writing backwards", flipFront) { on -> app.prefs.setFlipFrontCamera(on) }
     val crashReports by app.prefs.crashReports.collectAsState()
     ToggleRow(Icons.Filled.BugReport, "Send crash reports", "To your Hearth server, so a fix can be made", crashReports) { on -> app.prefs.setCrashReports(on) }
     val sendHd by app.prefs.sendHd.collectAsState()

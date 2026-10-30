@@ -22,6 +22,7 @@ import livekit.org.webrtc.CapturerObserver
 import livekit.org.webrtc.SurfaceTextureHelper
 import livekit.org.webrtc.VideoCapturer
 import livekit.org.webrtc.VideoFrame
+import org.hearth.ember.ember
 
 /** A camera the person can pick: the front one, or one of the rear lenses (ultrawide, main, telephoto). */
 data class Lens(val id: String, val label: String, val cameraId: String, val zoom: Float, val front: Boolean)
@@ -222,7 +223,10 @@ class LensCapturer(private val context: Context, initial: Lens) : VideoCapturer 
         // Front frames are not mirrored here (the view mirrors your own picture), so both lenses turn the same way with the phone.
         val rotation = (sensor - display + 360) % 360
         val source = frame.buffer
-        val buffer = turnTexture(source, undo) ?: source.also { it.retain() }
+        // The upright picture's left and right run along the buffer's own left and right when the picture is turned by 0 or 180, and along its
+        // top and bottom when it is turned by 90 or 270.
+        val flip = lens.front && context.ember.prefs.flipFrontCamera.value
+        val buffer = turnTexture(source, undo, flip, rotation % 180 != 0) ?: source.also { it.retain() }
         val turned = VideoFrame(buffer, rotation, frame.timestampNs)
         observer?.onFrameCaptured(turned)
         turned.release()
@@ -236,12 +240,13 @@ class LensCapturer(private val context: Context, initial: Lens) : VideoCapturer 
     }
 
     /** The same texture, sampled turned by [degrees] around its centre, under the swapped width and height. Null if the buffer cannot do it. */
-    private fun turnTexture(source: VideoFrame.Buffer, degrees: Float): VideoFrame.Buffer? {
+    private fun turnTexture(source: VideoFrame.Buffer, degrees: Float, flip: Boolean = false, flipVertical: Boolean = false): VideoFrame.Buffer? {
         if (source !is livekit.org.webrtc.TextureBufferImpl) return null
         val method = applyTransform ?: return null
         val m = android.graphics.Matrix()
         m.preTranslate(0.5f, 0.5f)
         m.preRotate(degrees)
+        if (flip) m.preScale(if (flipVertical) 1f else -1f, if (flipVertical) -1f else 1f)
         m.preTranslate(-0.5f, -0.5f)
         return runCatching { method.invoke(source, m, source.width, source.height) as VideoFrame.Buffer }.getOrNull()
     }

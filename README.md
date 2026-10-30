@@ -41,6 +41,7 @@ Updates arrive through the app. Ember checks this repository's releases once an 
 - One-to-one and group, voice and video, through LiveKit.
 - Pre-call screen with camera lens choice and microphone check, screen sharing, audio output choice, picture in picture.
 - Registered with Android Telecom, so Bluetooth headsets and watches can answer, mute and end a call.
+- Front camera: your own picture looks like a mirror (switch: Mirror my own picture) and others see you as you are. Samsung front cameras deliver an already flipped picture, so Ember flips it once before sending (Settings, Chats and calls, Flip front camera for others).
 - Low battery warnings: at 20, 15, 10 and 5 percent you get a notification and a banner telling you to plug in and use a fast charger, and the others in the call see "Name's battery is at 15%". The banner goes away when you plug in. Switch: Settings, Notifications and sounds, Low battery in calls.
 
 **Accounts and privacy**
@@ -107,10 +108,11 @@ Signing, releasing and testing against a scratch server are in [docs/DEVELOPMENT
 | 0.9 | S3, FTP and SFTP places, restore on first sign-in, group management, update notifier, spell check | Done |
 | 1.0 | Stable release | Done |
 | 1.1 | Low battery warnings in calls, crash reports to the server, spell check test | Done |
+| 1.1.1 | Front camera flip for Samsung phones, restore dialog fits in landscape | Done |
 
 ### Open items
 
-- [ ] Which side of a call picture is flipped on Samsung front cameras (reported for your own preview and for other people's pictures, in Ember and in the web app). Needs a test on the phone
+- [ ] The front camera flip (1.1.1) confirmed from the other side of a call. On the S23 the picture a second participant receives matches the true view and the preview looks like a mirror; the web app has the same cause and is not changed yet
 - [ ] Spell check confirmed on a Samsung phone (works on the emulator; use Test spell checking on the phone)
 - [ ] Low battery messages from another phone seen on a second device (sending and the local warning are verified on the emulator)
 - [ ] Hourly update check confirmed on a phone over several hours
