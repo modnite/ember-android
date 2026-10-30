@@ -209,6 +209,15 @@ class Repository(
         return room
     }
 
+    /** Add people to a group; returns what the server did, so the screen can say who was left out and why. */
+    suspend fun addMembers(roomId: String, userIds: List<String>): org.hearth.ember.data.AddMembersResponse {
+        val result = api.addMembers(roomId, userIds)
+        upsertRoom(result.room)
+        return result
+    }
+
+    suspend fun removeMember(roomId: String, userId: String) { upsertRoom(api.removeMember(roomId, userId)) }
+
     private fun upsertRoom(room: Room) {
         absorbUsers(room.members)
         _rooms.update { list ->

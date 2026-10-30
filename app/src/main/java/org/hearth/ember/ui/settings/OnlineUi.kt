@@ -63,7 +63,7 @@ private fun Heading(title: String) {
 private fun KeyField(value: String, label: String, hint: String, onChange: (String) -> Unit) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
         OutlinedTextField(
-            value = value, onValueChange = onChange, singleLine = true, label = { Text(label) }, placeholder = { Text(hint) },
+            value = value, onValueChange = onChange, singleLine = true, label = { Text(label) }, placeholder = { org.hearth.ember.ui.components.PlaceholderText(hint) },
             keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
             modifier = Modifier.fillMaxWidth(),
         )

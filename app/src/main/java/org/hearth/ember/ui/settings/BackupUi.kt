@@ -246,7 +246,7 @@ fun BackupRows() {
             title = { Text("Add WebDAV or Nextcloud") },
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(url, { url = it }, singleLine = true, label = { Text("Folder address") }, placeholder = { Text("https://cloud.example.com/remote.php/dav/files/you/Backups") })
+                    OutlinedTextField(url, { url = it }, singleLine = true, label = { Text("Folder address") }, placeholder = { org.hearth.ember.ui.components.PlaceholderText("https://cloud.example.com/remote.php/dav/files/you/Backups") })
                     OutlinedTextField(user, { user = it }, singleLine = true, label = { Text("Username") })
                     OutlinedTextField(davPass, { davPass = it }, singleLine = true, label = { Text("Password or app password") }, visualTransformation = PasswordVisualTransformation())
                 }

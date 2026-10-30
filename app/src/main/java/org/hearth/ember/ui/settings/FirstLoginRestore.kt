@@ -129,11 +129,12 @@ fun FirstLoginRestore(password: String, onClose: () -> Unit) {
         return
     }
 
+    // The text and the buttons share one scrolling body: at a big text size or sideways, no button is ever cut off below the dialog.
     AlertDialog(
         onDismissRequest = { finish() },
         title = { Text(if (found != null) "Restore your backup?" else "Restore a backup?") },
         text = {
-            Column {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
                 when {
                     checking -> Text("Looking for a backup of this account on this server…", style = MaterialTheme.typography.bodyMedium)
                     found != null -> Text(
@@ -143,18 +144,15 @@ fun FirstLoginRestore(password: String, onClose: () -> Unit) {
                     else -> Text("No backup of this account was found on this server. If you have one somewhere else, you can restore it from a file, a folder, a cloud drive or your own server. Your encryption key and settings come back, so encrypted chats open.", style = MaterialTheme.typography.bodyMedium)
                 }
                 ActivityLine()
+                androidx.compose.foundation.layout.Spacer(Modifier.padding(top = 8.dp))
+                if (found != null) {
+                    TextButton(onClick = { restore(found!!.first, found!!.second) }, modifier = Modifier.fillMaxWidth()) { Text("Restore") }
+                    TextButton(onClick = { choosing = true }, modifier = Modifier.fillMaxWidth()) { Text("Another source") }
+                } else TextButton(enabled = !checking, onClick = { choosing = true }, modifier = Modifier.fillMaxWidth()) { Text("Choose a source") }
+                TextButton(onClick = { finish() }, modifier = Modifier.fillMaxWidth()) { Text("Not now") }
             }
         },
-        confirmButton = {
-            if (found != null) TextButton(onClick = { restore(found!!.first, found!!.second) }) { Text("Restore") }
-            else TextButton(enabled = !checking, onClick = { choosing = true }) { Text("Choose a source") }
-        },
-        dismissButton = {
-            Column {
-                if (found != null) TextButton(onClick = { choosing = true }) { Text("Another source") }
-                TextButton(onClick = { finish() }) { Text("Not now") }
-            }
-        },
+        confirmButton = {},
     )
 }
 

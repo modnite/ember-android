@@ -283,7 +283,7 @@ private fun ChatsTab(nav: NavHostController, connected: Boolean) {
                 if (searching) {
                     TextField(
                         value = query, onValueChange = { query = it }, singleLine = true,
-                        placeholder = { Text("Search chats") },
+                        placeholder = { org.hearth.ember.ui.components.PlaceholderText("Search chats") },
                         colors = TextFieldDefaults.colors(
                             focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
                             unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,

@@ -82,6 +82,8 @@ data class Room(
     val avatar: String? = null,
     val encrypted: Boolean = false,
     val createdAt: Long = 0,
+    /** Who made the group, the one who may remove people. Null for a group from before the server recorded it. */
+    val createdBy: String? = null,
     val members: List<User> = emptyList(),
     val lastMessage: Message? = null,
     val unread: Int = 0,
@@ -118,6 +120,13 @@ data class RoomsResponse(val rooms: List<Room> = emptyList())
 
 @Serializable
 data class RoomResponse(val room: Room)
+
+@Serializable
+data class SkippedMember(val id: String, val reason: String)
+
+/** What the server did with a request to add people: who is in now, and who it left out and why. */
+@Serializable
+data class AddMembersResponse(val room: Room, val added: List<String> = emptyList(), val skipped: List<SkippedMember> = emptyList())
 
 @Serializable
 data class MessagesResponse(val messages: List<Message> = emptyList())

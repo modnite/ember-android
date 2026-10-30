@@ -27,6 +27,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.PersonRemove
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -69,6 +72,8 @@ fun RoomDetailsScreen(nav: NavHostController, roomId: String) {
     val scope = rememberCoroutineScope()
     var editing by remember { mutableStateOf(false) }
     var leaving by remember { mutableStateOf(false) }
+    var addingPeople by remember { mutableStateOf(false) }
+    var removing by remember { mutableStateOf<org.hearth.ember.data.User?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var pictureMenu by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -116,6 +121,9 @@ fun RoomDetailsScreen(nav: NavHostController, roomId: String) {
                     Text(room.title(meId), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                     val sub = if (room.isDm) room.other(meId)?.statusMessage.orEmpty() else room.topic
                     if (sub.isNotBlank()) Text(sub, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                    if (!room.isDm) TextButton(onClick = { editing = true }) {
+                        Icon(Icons.Filled.Edit, null, Modifier.size(18.dp)); Spacer(Modifier.size(6.dp)); Text("Rename group")
+                    }
                     if (room.encrypted) {
                         Spacer(Modifier.height(12.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -130,6 +138,15 @@ fun RoomDetailsScreen(nav: NavHostController, roomId: String) {
                     style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
                 )
+                if (!room.isDm) Row(
+                    Modifier.fillMaxWidth().clickable { addingPeople = true }.padding(horizontal = 20.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(Modifier.size(44.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Filled.PersonAdd, null, tint = MaterialTheme.colorScheme.onPrimary)
+                    }
+                    Text("Add people", Modifier.padding(start = 14.dp), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                }
             }
             items(room.members, key = { it.id }) { member ->
                 Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -139,8 +156,12 @@ fun RoomDetailsScreen(nav: NavHostController, roomId: String) {
                             member.displayName.ifBlank { member.username } + if (member.id == meId) " (you)" else "",
                             style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium,
                         )
-                        val line = member.statusMessage.ifBlank { if (member.isOnline) "online" else "" }
+                        val line = (if (member.id == room.createdBy) "Made this group" else "").ifBlank { member.statusMessage.ifBlank { if (member.isOnline) "online" else "" } }
                         if (line.isNotBlank()) Text(line, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    // The person who made the group (or anyone, in an older group with no recorded maker) can remove the others.
+                    if (!room.isDm && member.id != meId && (room.createdBy == null || room.createdBy == meId)) {
+                        IconButton(onClick = { removing = member }) { Icon(Icons.Filled.PersonRemove, "Remove ${member.displayName.ifBlank { member.username }}", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
                     }
                 }
             }
@@ -178,6 +199,21 @@ fun RoomDetailsScreen(nav: NavHostController, roomId: String) {
             dismissButton = { TextButton(onClick = { editing = false }) { Text("Cancel") } },
         )
     }
+    removing?.let { who ->
+        AlertDialog(
+            onDismissRequest = { removing = null },
+            title = { Text("Remove ${who.displayName.ifBlank { who.username }}?") },
+            text = { Text("They stop receiving this group's messages. Someone can add them again.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    removing = null
+                    scope.launch { runCatching { app.repo.removeMember(roomId, who.id) }.onFailure { error = it.message } }
+                }) { Text("Remove", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { removing = null }) { Text("Cancel") } },
+        )
+    }
+    if (addingPeople && room != null) AddPeopleDialog(room, onDone = { addingPeople = false })
     if (leaving) AlertDialog(
         onDismissRequest = { leaving = false },
         title = { Text("Leave this group?") },
@@ -209,4 +245,69 @@ private fun groupPictureBytes(context: android.content.Context, uri: android.net
     val square = android.graphics.Bitmap.createBitmap(source, (source.width - side) / 2, (source.height - side) / 2, side, side)
     val scaled = if (side > 512) android.graphics.Bitmap.createScaledBitmap(square, 512, 512, true) else square
     return java.io.ByteArrayOutputStream().also { scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, it) }.toByteArray()
+}
+
+
+/**
+ * Pick people to add to a group: everyone this phone knows who is not in it yet. The server has the last word (a person who blocked you, or
+ * who is not your contact, is left out and the reason is shown). Anyone added can read what was said before, which the dialog says.
+ */
+@Composable
+private fun AddPeopleDialog(room: Room, onDone: () -> Unit) {
+    val app = LocalContext.current.ember
+    val scope = rememberCoroutineScope()
+    val users by app.repo.users.collectAsState()
+    val me by app.repo.me.collectAsState()
+    val chosen = remember { androidx.compose.runtime.mutableStateListOf<String>() }
+    var busy by remember { mutableStateOf(false) }
+    var problem by remember { mutableStateOf<String?>(null) }
+    val inGroup = room.members.map { it.id }.toSet()
+    val people = remember(users, me, room.members) { users.values.filter { it.id != me?.id && it.id !in inGroup }.sortedBy { it.displayName.lowercase() } }
+    AlertDialog(
+        onDismissRequest = { if (!busy) onDone() },
+        title = { Text("Add people") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                if (people.isEmpty()) Text("Everyone you know is already in this group.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                for (u in people) {
+                    Row(
+                        Modifier.fillMaxWidth().clickable { if (u.id in chosen) chosen.remove(u.id) else chosen.add(u.id) }.padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        UserAvatar(u, 40.dp, showStatus = false)
+                        Column(Modifier.padding(start = 12.dp).weight(1f)) {
+                            Text(u.displayName.ifBlank { u.username }, style = MaterialTheme.typography.bodyLarge)
+                            Text(u.username, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Checkbox(checked = u.id in chosen, onCheckedChange = { if (it) chosen.add(u.id) else chosen.remove(u.id) })
+                    }
+                }
+                if (people.isNotEmpty()) Text(
+                    "People you add can read the messages sent before they joined.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 10.dp),
+                )
+                problem?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp)) }
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = chosen.isNotEmpty() && !busy, onClick = {
+                busy = true; problem = null
+                scope.launch {
+                    runCatching { app.repo.addMembers(room.id, chosen.toList()) }
+                        .onSuccess { r ->
+                            if (r.skipped.isEmpty()) onDone()
+                            else {
+                                // Say who was left out, and why; the ones that went in are already in the group.
+                                val names = users.mapValues { it.value.displayName.ifBlank { it.value.username } }
+                                problem = (if (r.added.isNotEmpty()) "Added the others. " else "") + r.skipped.joinToString("\n") { "${names[it.id] ?: "Someone"}: ${it.reason}" }
+                                chosen.clear()
+                            }
+                        }
+                        .onFailure { problem = it.message ?: "Could not add them." }
+                    busy = false
+                }
+            }) { Text(if (chosen.isEmpty()) "Add" else "Add ${chosen.size}") }
+        },
+        dismissButton = { TextButton(enabled = !busy, onClick = onDone) { Text("Close") } },
+    )
 }

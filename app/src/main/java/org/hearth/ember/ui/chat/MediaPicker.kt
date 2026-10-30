@@ -1,5 +1,6 @@
 package org.hearth.ember.ui.chat
 
+import androidx.compose.ui.focus.focusRequester
 import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -70,7 +71,7 @@ private sealed interface Results {
 @Composable
 fun MediaPicker(
     kind: MediaKind, onSendFavourite: (File) -> Unit, onSendOnline: (OnlineItem) -> Unit, onSendBytes: (ByteArray, String, String) -> Unit, onOpenSettings: () -> Unit,
-    availableHeight: androidx.compose.ui.unit.Dp? = null,
+    availableHeight: androidx.compose.ui.unit.Dp? = null, onSearching: (Boolean) -> Unit = {},
 ) {
     val context = LocalContext.current
     val app = context.ember
@@ -115,7 +116,14 @@ fun MediaPicker(
     // Sideways the drawer is short: the sources and the search share one row (the magnifier opens the search) so the grid keeps the room.
     val compact = availableHeight != null && availableHeight < 240.dp
     var searchOpen by remember { mutableStateOf(false) }
-    val gridMax = availableHeight?.let { (it - (if (compact) 56.dp else 150.dp)).coerceAtLeast(70.dp) } ?: (LocalConfiguration.current.screenHeightDp * 0.42f).dp.coerceIn(150.dp, 360.dp)
+    val searchFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    // The chat makes room for the search while it is open sideways (the message box steps aside), so the keyboard does not hide it.
+    androidx.compose.runtime.LaunchedEffect(searchOpen) { onSearching(searchOpen) }
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { onSearching(false) } }
+    androidx.compose.runtime.LaunchedEffect(searchOpen) { if (searchOpen) { kotlinx.coroutines.delay(120); runCatching { searchFocus.requestFocus() }; keyboard?.show() } }
+    val gridMax = availableHeight?.let { (it - (if (compact) 64.dp else 150.dp)).coerceAtLeast(70.dp) } ?: (LocalConfiguration.current.screenHeightDp * 0.42f).dp.coerceIn(150.dp, 360.dp)
     val tile = if (LocalConfiguration.current.screenHeightDp < 500) 76.dp else 92.dp
 
     Column(Modifier.fillMaxWidth().then(if (availableHeight == null) Modifier.heightIn(min = gridMax + 150.dp) else Modifier)) {
@@ -126,14 +134,16 @@ fun MediaPicker(
         val searchField: @Composable (Modifier) -> Unit = { m ->
             OutlinedTextField(
                 value = query, onValueChange = { query = it }, singleLine = true, leadingIcon = { Icon(Icons.Filled.Search, null) },
-                placeholder = { Text(if (source is org.hearth.ember.data.SignalSource) "Search packs (cat, meme, hello…)" else "Search ${source?.label ?: ""}") }, modifier = m,
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search),
+                keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSearch = { focusManager.clearFocus(); keyboard?.hide() }),
+                placeholder = { org.hearth.ember.ui.components.PlaceholderText(if (source is org.hearth.ember.data.SignalSource) "Search packs (cat, meme, hello…)" else "Search ${source?.label ?: ""}") }, modifier = m,
             )
         }
         if (compact) {
-            Row(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (searchOpen && source != null) {
                     IconButton(onClick = { searchOpen = false; query = "" }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Close the search") }
-                    searchField(Modifier.weight(1f))
+                    searchField(Modifier.weight(1f).heightIn(min = 56.dp).androidx_focus(searchFocus))
                 } else {
                     Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) { chips() }
                     if (source != null) IconButton(onClick = { searchOpen = true }) { Icon(Icons.Filled.Search, "Search") }
@@ -191,3 +201,5 @@ fun MediaPicker(
 /** What an online result is sent as: the downloaded bytes under a name every client reads right (stickers keep the sticker- prefix). */
 suspend fun OnlineMedia.fetchForSending(item: OnlineItem, kind: MediaKind): Triple<ByteArray, String, String> =
     Triple(download(item), OnlineMedia.fileName(item, kind), OnlineMedia.mime(item))
+
+private fun Modifier.androidx_focus(requester: androidx.compose.ui.focus.FocusRequester): Modifier = this.focusRequester(requester)

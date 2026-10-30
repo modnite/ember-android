@@ -138,7 +138,7 @@ fun LoginScreen() {
 
             OutlinedTextField(
                 value = server, onValueChange = { server = it }, label = { Text("Server") }, singleLine = true,
-                placeholder = { Text("chat.example.com") },
+                placeholder = { org.hearth.ember.ui.components.PlaceholderText("chat.example.com") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next),
                 modifier = Modifier.fillMaxWidth().revealWhenFocused(),
             )

@@ -1,5 +1,6 @@
 package org.hearth.ember.ui.chat
 
+import androidx.compose.foundation.layout.statusBarsPadding
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -167,6 +168,8 @@ fun ChatScreen(nav: NavHostController, roomId: String, embedded: Boolean = false
     var actionAnchor by remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
     var emojiFor by remember { mutableStateOf<Message?>(null) }
     var emojiForDraft by remember { mutableStateOf(false) }
+    // The emoji search is open. Some keyboards (Samsung's) hand focus back to the message box as they open for the search box; that must not close the panel.
+    var emojiSearching by remember { mutableStateOf(false) }
     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val fieldFocus = remember { androidx.compose.ui.focus.FocusRequester() }
@@ -367,7 +370,7 @@ fun ChatScreen(nav: NavHostController, roomId: String, embedded: Boolean = false
             onDelete = { confirmDelete = pickedMessages },
             onPin = { val m = pickedMessages.first(); picked = emptyList(); scope.launch { runCatching { app.repo.pin(m) } } },
             onEdit = { val m = pickedMessages.first(); picked = emptyList(); editing = m; replyTo = null; draft = m.body },
-        ) else TopAppBar(
+        ) else if (emojiSearching && androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp < 500) Spacer(Modifier.statusBarsPadding()) else TopAppBar(
             navigationIcon = { if (!embedded) IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
             title = {
                 if (room != null) Row(Modifier.clickable { nav.navigate("room/$roomId") }, verticalAlignment = Alignment.CenterVertically) {
@@ -533,7 +536,8 @@ fun ChatScreen(nav: NavHostController, roomId: String, embedded: Boolean = false
         } else if (recording) {
             RecordingBar(recorder, onCancel = { recorder.cancel(); recording = false }, onSend = { sendRecording() })
         } else Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Composer(
+            val shortWindow = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp < 500
+            if (!(emojiSearching && shortWindow)) Composer(
                 text = draft, onText = { draft = it }, enterSends = enterSends, sending = sending,
                 onSend = { send() },
                 onEmoji = {
@@ -541,7 +545,7 @@ fun ChatScreen(nav: NavHostController, roomId: String, embedded: Boolean = false
                     else { focusManager.clearFocus(); keyboard?.hide(); emojiForDraft = true }
                 },
                 onNudge = sendNudge, onCamera = { capture(it) },
-                fieldFocus = fieldFocus, onFieldFocused = { emojiForDraft = false }, bottomInset = !emojiForDraft, panelOpen = emojiForDraft,
+                fieldFocus = fieldFocus, onFieldFocused = { if (!emojiSearching) emojiForDraft = false }, bottomInset = !emojiForDraft, panelOpen = emojiForDraft,
                 onRecord = {
                     if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) startRecording()
                     else micPermission.launch(android.Manifest.permission.RECORD_AUDIO)
@@ -555,6 +559,7 @@ fun ChatScreen(nav: NavHostController, roomId: String, embedded: Boolean = false
                 onSticker = { f -> sendFavourite(f, "image/webp") }, onGif = { f -> sendFavourite(f, "image/gif") },
                 onOnline = { item, kind -> sendOnline(item, kind) }, onBytes = { bytes, name, mime -> sendReady(bytes, name, mime) },
                 onSettings = { emojiForDraft = false; nav.navigate("settings/online") },
+                onSearching = { emojiSearching = it },
             ) { e -> draft += e }
         }
     }
@@ -642,6 +647,7 @@ private fun EncryptedNotice() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun Composer(
     text: String, onText: (String) -> Unit, enterSends: Boolean, sending: Boolean, onSend: () -> Unit, onEmoji: () -> Unit, onNudge: () -> Unit, onRecord: () -> Unit,
@@ -649,33 +655,58 @@ private fun Composer(
     fieldFocus: androidx.compose.ui.focus.FocusRequester, onFieldFocused: () -> Unit, bottomInset: Boolean, panelOpen: Boolean,
 ) {
     var cameraMenu by remember { mutableStateOf(false) }
+    val compact = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp < 500
+    val buttonHeight = if (compact) 44.dp else 56.dp
     val nudgeButton by LocalContext.current.ember.prefs.nudgeButton.collectAsState()
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     Row(Modifier.widthIn(max = 880.dp).fillMaxWidth().then(if (bottomInset) Modifier.navigationBarsPadding() else Modifier).padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.Bottom) {
         Surface(shape = RoundedCornerShape(26.dp), color = MaterialTheme.colorScheme.surface, shadowElevation = 1.dp, modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.Bottom) {
                 // Emoji, stickers and GIFs live behind the face at the left, as in the messengers you know.
-                IconButton(onClick = onEmoji, modifier = Modifier.size(width = 44.dp, height = 56.dp)) {
+                IconButton(onClick = onEmoji, modifier = Modifier.size(width = 44.dp, height = buttonHeight)) {
                     Icon(if (panelOpen) Icons.Filled.Keyboard else Icons.Filled.EmojiEmotions, if (panelOpen) "Keyboard" else "Emoji, stickers and GIFs", tint = muted)
                 }
-                TextField(
-                    value = text, onValueChange = onText, placeholder = { Text("Message") },
-                    modifier = Modifier.weight(1f).heightIn(max = 160.dp).focusRequester(fieldFocus).onFocusChanged { if (it.isFocused) onFieldFocused() }.onPreviewKeyEvent { e ->
-                        // A physical keyboard: Enter sends, Shift+Enter makes a new line (the on-screen keyboard keeps its own Enter).
-                        if (e.type == KeyEventType.KeyDown && (e.key == Key.Enter || e.key == Key.NumPadEnter) && !e.isShiftPressed) {
-                            onSend(); true
-                        } else false
-                    },
+                val fieldModifier = Modifier.weight(1f).heightIn(max = 160.dp).focusRequester(fieldFocus).onFocusChanged { if (it.isFocused) onFieldFocused() }.onPreviewKeyEvent { e ->
+                    // A physical keyboard: Enter sends, Shift+Enter makes a new line (the on-screen keyboard keeps its own Enter).
+                    if (e.type == KeyEventType.KeyDown && (e.key == Key.Enter || e.key == Key.NumPadEnter) && !e.isShiftPressed) {
+                        onSend(); true
+                    } else false
+                }
+                val options = KeyboardOptions(imeAction = if (enterSends) ImeAction.Send else ImeAction.Default, capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Sentences)
+                val actions = androidx.compose.foundation.text.KeyboardActions(onSend = { onSend() })
+                if (compact) {
+                    // Sideways with the keyboard up there is barely room for one line: the same field with less padding, so the text is never cut.
+                    androidx.compose.foundation.text.BasicTextField(
+                        value = text, onValueChange = onText, modifier = fieldModifier, maxLines = 6,
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
+                        keyboardOptions = options, keyboardActions = actions,
+                        decorationBox = { inner ->
+                            TextFieldDefaults.DecorationBox(
+                                value = text, innerTextField = inner, enabled = true, singleLine = false,
+                                visualTransformation = androidx.compose.ui.text.input.VisualTransformation.None,
+                                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                                placeholder = { org.hearth.ember.ui.components.PlaceholderText("Message") },
+                                colors = TextFieldDefaults.colors(
+                                    focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent,
+                                    focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
+                                ),
+                                contentPadding = TextFieldDefaults.contentPaddingWithoutLabel(top = 8.dp, bottom = 8.dp),
+                            )
+                        },
+                    )
+                } else TextField(
+                    value = text, onValueChange = onText, placeholder = { org.hearth.ember.ui.components.PlaceholderText("Message") },
+                    modifier = fieldModifier,
                     colors = TextFieldDefaults.colors(
                         focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent,
                         focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
                     ),
-                    keyboardOptions = KeyboardOptions(imeAction = if (enterSends) ImeAction.Send else ImeAction.Default, capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Sentences),
-                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSend = { onSend() }),
+                    keyboardOptions = options, keyboardActions = actions,
                     maxLines = 6,
                 )
                 Box {
-                    IconButton(onClick = { onAttachMenu(true) }, modifier = Modifier.size(width = 44.dp, height = 56.dp)) { Icon(Icons.Filled.AttachFile, "Attach", tint = muted) }
+                    IconButton(onClick = { onAttachMenu(true) }, modifier = Modifier.size(width = 44.dp, height = buttonHeight)) { Icon(Icons.Filled.AttachFile, "Attach", tint = muted) }
                     DropdownMenu(expanded = attachMenu, onDismissRequest = { onAttachMenu(false) }) {
                         DropdownMenuItem(text = { Text("Photos and videos") }, leadingIcon = { Icon(Icons.Filled.PhotoLibrary, null) }, onClick = onPhoto)
                         DropdownMenuItem(text = { Text("File") }, leadingIcon = { Icon(Icons.Filled.AttachFile, null) }, onClick = onFile)
@@ -685,7 +716,7 @@ private fun Composer(
                 }
                 // Nothing typed yet: the camera sits in the field, a thumb away.
                 if (text.isBlank()) Box {
-                    IconButton(onClick = { cameraMenu = true }, modifier = Modifier.size(width = 44.dp, height = 56.dp)) { Icon(Icons.Filled.PhotoCamera, "Camera", tint = muted) }
+                    IconButton(onClick = { cameraMenu = true }, modifier = Modifier.size(width = 44.dp, height = buttonHeight)) { Icon(Icons.Filled.PhotoCamera, "Camera", tint = muted) }
                     DropdownMenu(expanded = cameraMenu, onDismissRequest = { cameraMenu = false }) {
                         DropdownMenuItem(text = { Text("Take a photo") }, leadingIcon = { Icon(Icons.Filled.PhotoCamera, null) }, onClick = { cameraMenu = false; onCamera(false) })
                         DropdownMenuItem(text = { Text("Record a video") }, leadingIcon = { Icon(Icons.Filled.Videocam, null) }, onClick = { cameraMenu = false; onCamera(true) })
@@ -828,11 +859,11 @@ private fun EmojiSheet(onDismiss: () -> Unit, onPick: (String) -> Unit) {
 @Composable
 private fun EmojiPanel(
     height: androidx.compose.ui.unit.Dp, onSticker: (File) -> Unit, onGif: (File) -> Unit, onOnline: (org.hearth.ember.data.OnlineItem, MediaKind) -> Unit,
-    onBytes: (ByteArray, String, String) -> Unit, onSettings: () -> Unit, onPick: (String) -> Unit,
+    onBytes: (ByteArray, String, String) -> Unit, onSettings: () -> Unit, onSearching: (Boolean) -> Unit = {}, onPick: (String) -> Unit,
 ) {
     Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth().widthIn(max = 880.dp)) {
         Column {
-            EmojiBody(height, onSticker, onGif, onOnline, onBytes, onSettings, onPick)
+            EmojiBody(height, onSticker, onGif, onOnline, onBytes, onSettings, onPick, onSearching)
             Spacer(Modifier.navigationBarsPadding())
         }
     }
@@ -850,7 +881,7 @@ private const val RecentEmojiMax = 24
 private fun EmojiBody(
     height: androidx.compose.ui.unit.Dp, onSticker: ((File) -> Unit)? = null, onGif: ((File) -> Unit)? = null,
     onOnline: ((org.hearth.ember.data.OnlineItem, MediaKind) -> Unit)? = null, onBytes: (ByteArray, String, String) -> Unit = { _, _, _ -> },
-    onSettings: () -> Unit = {}, onPick: (String) -> Unit,
+    onSettings: () -> Unit = {}, onPick: (String) -> Unit, onSearching: (Boolean) -> Unit = {},
 ) {
     var query by remember { mutableStateOf("") }
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -872,30 +903,46 @@ private fun EmojiBody(
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
     LaunchedEffect(category) { gridState.scrollToItem(0) }
-    LaunchedEffect(searching) { if (searching) { focus.requestFocus(); keyboard?.show() } }
+    // Tell the chat while the search is open, and when this panel goes away with it open.
+    LaunchedEffect(searching) { onSearching(searching) }
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { onSearching(false) } }
+    // A short wait lets the panel settle before the keyboard is asked for, so the two do not fight over the window.
+    LaunchedEffect(searching) { if (searching) { kotlinx.coroutines.delay(120); focus.requestFocus(); keyboard?.show() } }
     val suggestions = remember(query) {
         val q = query.trim().lowercase()
         if (q.isEmpty()) emptyList() else AllEmoji.filter { it.name.contains(q) }.take(40)
     }
     val barHeight = if (kinds) (if (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp < 500) 40.dp else 48.dp) else 0.dp
-    val shown = if (searching) 132.dp else height
-    Column(Modifier.fillMaxWidth().height(shown)) {
-        Box(Modifier.weight(1f).fillMaxWidth()) {
+    // While searching the panel is as tall as its content (the field, a line of text and a strip of answers), whatever the text size is.
+    Column(Modifier.fillMaxWidth().then(if (searching) Modifier else Modifier.height(height))) {
+        Box(Modifier.then(if (searching) Modifier else Modifier.weight(1f)).fillMaxWidth()) {
             when {
-                section == 1 && kinds -> MediaPicker(MediaKind.Gif, onGif!!, { onOnline?.invoke(it, MediaKind.Gif) }, onBytes, onSettings, height - barHeight)
-                section == 2 && kinds -> MediaPicker(MediaKind.Sticker, onSticker!!, { onOnline?.invoke(it, MediaKind.Sticker) }, onBytes, onSettings, height - barHeight)
-                searching -> Column(Modifier.fillMaxSize()) {
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                section == 1 && kinds -> MediaPicker(MediaKind.Gif, onGif!!, { onOnline?.invoke(it, MediaKind.Gif) }, onBytes, onSettings, height - barHeight, onSearching)
+                section == 2 && kinds -> MediaPicker(MediaKind.Sticker, onSticker!!, { onOnline?.invoke(it, MediaKind.Sticker) }, onBytes, onSettings, height - barHeight, onSearching)
+                // Sideways there is room for one row above the keyboard: the field and its answers share it.
+                searching && androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp < 500 -> Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { searching = false; query = ""; focusManager.clearFocus(); keyboard?.hide() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Close the search") }
+                    androidx.compose.material3.TextField(
+                        value = query, onValueChange = { query = it }, singleLine = true, placeholder = { Text("Search emoji", maxLines = 1, softWrap = false, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
+                        modifier = Modifier.weight(1f).heightIn(min = 48.dp).focusRequester(focus),
+                        colors = TextFieldDefaults.colors(focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent),
+                    )
+                    androidx.compose.foundation.lazy.LazyRow(Modifier.weight(1.3f), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        items(suggestions.size) { i -> Text(suggestions[i].glyph, fontSize = 28.sp, modifier = Modifier.clip(CircleShape).clickable { pick(suggestions[i].glyph) }.padding(6.dp)) }
+                    }
+                }
+                searching -> Column(Modifier.fillMaxWidth()) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = { searching = false; query = ""; focusManager.clearFocus(); keyboard?.hide() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Close the search") }
                         androidx.compose.material3.TextField(
-                            value = query, onValueChange = { query = it }, singleLine = true, placeholder = { Text("Search emoji") },
-                            modifier = Modifier.weight(1f).focusRequester(focus),
+                            value = query, onValueChange = { query = it }, singleLine = true, placeholder = { Text("Search emoji", maxLines = 1, softWrap = false, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
+                            modifier = Modifier.weight(1f).heightIn(min = 56.dp).focusRequester(focus),
                             colors = TextFieldDefaults.colors(focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent),
                         )
                     }
                     if (suggestions.isEmpty()) Text(
                         if (query.isBlank()) "Type a word: heart, cat, pizza…" else "No emoji for that.",
-                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
                     ) else androidx.compose.foundation.lazy.LazyRow(contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp)) {
                         items(suggestions.size) { i -> Text(suggestions[i].glyph, fontSize = 30.sp, modifier = Modifier.clip(CircleShape).clickable { pick(suggestions[i].glyph) }.padding(8.dp)) }
                     }

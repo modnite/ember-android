@@ -88,12 +88,12 @@ internal fun RemotePlaceForm(kind: String, onCancel: () -> Unit, onDone: (Destin
         title = { Text(info.title) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(host, { host = it }, singleLine = true, label = { Text(if (s3) "Address" else if (kind == Destination.KIND_DAV) "Folder address" else "Server") }, placeholder = { Text(if (s3) "https://s3.example.com" else if (kind == Destination.KIND_DAV) "https://cloud.example.com/remote.php/dav/files/you/Backups" else "server.example.com or server.example.com:2222") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(host, { host = it }, singleLine = true, label = { Text(if (s3) "Address" else if (kind == Destination.KIND_DAV) "Folder address" else "Server") }, placeholder = { org.hearth.ember.ui.components.PlaceholderText(if (s3) "https://s3.example.com" else if (kind == Destination.KIND_DAV) "https://cloud.example.com/remote.php/dav/files/you/Backups" else "server.example.com or server.example.com:2222") }, modifier = Modifier.fillMaxWidth())
                 if (s3) {
-                    OutlinedTextField(region, { region = it }, singleLine = true, label = { Text("Region (optional)") }, placeholder = { Text("us-east-1") }, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(region, { region = it }, singleLine = true, label = { Text("Region (optional)") }, placeholder = { org.hearth.ember.ui.components.PlaceholderText("us-east-1") }, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(bucket, { bucket = it }, singleLine = true, label = { Text("Bucket") }, modifier = Modifier.fillMaxWidth())
                 }
-                if (kind != Destination.KIND_DAV) OutlinedTextField(folder, { folder = it }, singleLine = true, label = { Text(if (s3) "Folder in the bucket (optional)" else "Folder (optional)") }, placeholder = { Text("Backups/Ember") }, modifier = Modifier.fillMaxWidth())
+                if (kind != Destination.KIND_DAV) OutlinedTextField(folder, { folder = it }, singleLine = true, label = { Text(if (s3) "Folder in the bucket (optional)" else "Folder (optional)") }, placeholder = { org.hearth.ember.ui.components.PlaceholderText("Backups/Ember") }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(user, { user = it }, singleLine = true, label = { Text(if (s3) "Access key" else "Username") }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(pass, { pass = it }, singleLine = true, label = { Text(if (s3) "Secret key" else "Password") }, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { if (ready) check() }), modifier = Modifier.fillMaxWidth())
                 if (kind == Destination.KIND_FTP) {

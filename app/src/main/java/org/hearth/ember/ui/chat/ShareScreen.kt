@@ -75,7 +75,7 @@ fun ShareScreen(nav: NavHostController) {
             }
         }
         OutlinedTextField(
-            value = query, onValueChange = { query = it }, singleLine = true, placeholder = { Text("Search chats") },
+            value = query, onValueChange = { query = it }, singleLine = true, placeholder = { org.hearth.ember.ui.components.PlaceholderText("Search chats") },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         )
         failure?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 16.dp)) }

@@ -268,7 +268,7 @@ fun MediaPreview(uris: List<Uri>, onSend: (caption: String, quality: org.hearth.
             Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.Bottom) {
                 Surface(shape = RoundedCornerShape(24.dp), color = Color(0xFF2A2A2C), modifier = Modifier.weight(1f)) {
                     TextField(
-                        value = caption, onValueChange = { caption = it }, placeholder = { Text("Add a caption…", color = Color.White.copy(alpha = 0.5f)) }, maxLines = 4,
+                        value = caption, onValueChange = { caption = it }, placeholder = { org.hearth.ember.ui.components.PlaceholderText("Add a caption…", color = Color.White.copy(alpha = 0.5f)) }, maxLines = 4,
                         colors = TextFieldDefaults.colors(
                             focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent, focusedIndicatorColor = Color.Transparent,
                             unfocusedIndicatorColor = Color.Transparent, focusedTextColor = Color.White, unfocusedTextColor = Color.White, cursorColor = Color.White,

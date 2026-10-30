@@ -184,6 +184,12 @@ class Api(private val store: SessionStore, val client: OkHttpClient) {
 
     suspend fun leaveRoom(id: String) = send("POST", "/api/rooms/$id/leave", buildJsonObject {})
 
+    suspend fun addMembers(roomId: String, userIds: List<String>): AddMembersResponse =
+        post("/api/rooms/$roomId/members", buildJsonObject { put("userIds", kotlinx.serialization.json.JsonArray(userIds.map { JsonPrimitive(it) })) })
+
+    suspend fun removeMember(roomId: String, userId: String): Room =
+        EmberJson.decodeFromString<RoomResponse>(execute(Request.Builder().url(url("/api/rooms/$roomId/members/$userId")).delete().build())).room
+
     suspend fun renameRoom(id: String, name: String? = null, topic: String? = null): Room =
         EmberJson.decodeFromString<RoomResponse>(
             execute(
