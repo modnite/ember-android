@@ -77,7 +77,7 @@ Do not force-stop the app afterwards. That clears its notifications.
 
 - Every screen is checked in portrait and landscape, and with the keyboard open. Fields must stay visible.
 - Windows of 1000 dp or wider use the multi-pane layout. In an emulator: `adb shell wm size 1600x1000` and `adb shell wm density 213`. Reset with `wm size reset` and `wm density reset`.
-- Styling is flat: no glow, gradients or halos, and no explanatory text under titles.
+- Styling is flat and titles carry no explanatory text.
 
 ## Code map
 
