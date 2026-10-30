@@ -1,92 +1,119 @@
 # Ember
 
-Ember is the native Android messenger for a Hearth server. It is a real Android app (Kotlin, Jetpack Compose, Material 3), not a web view. It talks to the same server as the web app and the Windows client.
+Native Android messenger for a [Hearth server](https://github.com/modnite/hearth-server). Kotlin, Jetpack Compose, Material 3. Package `org.hearth.ember`, minSdk 26, targetSdk 35. Current version: 1.0.0.
 
-Package `org.hearth.ember`, minSdk 26, targetSdk 35. No Google services, no push provider, no assistant features.
+<p>
+<img src="docs/screenshots/chats.png" alt="Chats" width="24%">
+<img src="docs/screenshots/chat.png" alt="A group chat" width="24%">
+<img src="docs/screenshots/message-actions.png" alt="Message actions" width="24%">
+<img src="docs/screenshots/group-details.png" alt="Group details" width="24%">
+</p>
+<p>
+<img src="docs/screenshots/settings.png" alt="Settings" width="24%">
+<img src="docs/screenshots/notifications.png" alt="Notifications and sounds" width="24%">
+<img src="docs/screenshots/backup.png" alt="Backup and encryption" width="24%">
+</p>
+<p>
+<img src="docs/screenshots/chat-landscape.png" alt="Landscape" width="49%">
+<img src="docs/screenshots/wide-layout.png" alt="Wide layout for tablets and DeX" width="49%">
+</p>
 
-## What it does
+## Install
 
-- Chats: direct and group, replies, reactions, edits, pins, forwarding, photos, videos, GIFs, stickers, files, voice notes, link previews, nudges. Tap or long press a message to pick it: a top bar offers reply, copy, forward and delete, and your most used reactions float beside it.
-- Photos and videos: take them with the camera button or pick them from the gallery, look at them and add a caption before they go. Videos play in the app (seeking, also in encrypted chats). A group's picture can be changed by anyone in it.
-- Stickers and GIFs: the face button opens emoji, stickers and GIFs. A sticker is made from any picture (512 px WebP, drawn without a bubble) or kept from a chat; GIFs are added from files and move in the chat. Both can be searched online from the same sheet, with no key or signup: Signal's public sticker packs (the community directory at signalstickers.com, packs opened with the keys it lists, `data/SignalStickers.kt`), Google's animated Noto emoji (stickers), anime reaction GIFs from nekos.best and Wikimedia Commons (GIFs). Giphy and Imgur are optional extras that work once you paste a free key of your own (Settings → GIFs and stickers). The Signal directory data is CC BY-NC-SA 4.0, fetched at run time and not bundled. A tap sends, a long press keeps a result. Searches go straight from the phone to the service, never through the Hearth server. The animated emoji list is `app/src/main/res/raw/animated_emoji.txt` (probed against fonts.gstatic.com).
-- Backup: one switch and one folder turns on automatic backups, at a time of day you choose (daily, weekly or monthly), to any number of places (your own Hearth server, a folder Android can reach, which includes Google Drive, OneDrive, Proton Drive and Dropbox through their apps, WebDAV or Nextcloud, S3-compatible storage such as MinIO, Backblaze B2 or Wasabi, FTP or FTPS, SFTP), keeping the newest few. A scheduled backup that could not run on time (phone off, no Wi-Fi) starts as soon as Ember is opened or the phone allows it. On a fresh install the first sign-in to an existing account offers to restore the newest backup from your Hearth server, or from any of the other places or a file. A backup holds your encryption key, settings and stickers, and optionally a readable archive of your chats and their files. Every backup is sealed (AES-256-GCM) with a key that belongs to your account: your Hearth server makes it the first time and gives it only to you after you sign in, so there is no password to choose or forget, and nobody else can open your backups. From 0.6 the backup key is also kept inside every backup under your account password (Argon2id): Ember sets this up by itself at sign-in, and a backup then opens with the password alone, in Ember or the Backup Reader. A new phone restores from the sign-in screen (it signs you in first and uses the password you typed). The key is shown under Settings, Backup and encryption, for reading a backup on a computer. Backups from before 0.4 were sealed with a passphrase and still open. Needs a Hearth server that has `GET /api/backup/key` (added with Ember 0.4).
-- Ember Backup Reader (`tools/backup-reader`, Compose Multiplatform for Windows, macOS and Linux): opens a backup or archive on a computer, lists chats, searches, shows pictures, saves files. It holds no key of its own: it asks your server for your key after you sign in (or takes the key from Ember), so it cannot open anyone else's backup. `tools/open_archive.py` does the same on the command line.
-- Accounts: anyone can join a server that has open registration (no invite code needed), and any account can turn on optional two-step sign-in with an authenticator app (Settings, Two-step sign-in), with recovery codes. See hearth/docs/ACCOUNTS.md.
-- Chat wallpaper: doodles that take your accent colour (the default), a gradient, dots, plain, or a photo from your gallery with a darkening slider.
-- Notifications: instant delivery keeps a connection open (Android insists on showing one small silent notification for that, which has no status-bar icon); switch it off in Settings, Notifications and sounds, and Ember checks every 15 minutes with nothing showing in between (calls do not ring while the app is closed).
-- Contacts: add by username, accept requests, people only see contacts and shared rooms.
-- End-to-end encryption (Hearth E2EE v2): keys are set up per phone, chat text and files are sealed on the phone. Calls in encrypted chats are sealed with the same derived media key as the web app.
-- Calls: pre-call screen with camera, lenses (front, 0.6x, 1x, 3x) and mic check, one-to-one and group, screen sharing (1080p, 60 fps, 8 Mbps target), audio output choice, picture in picture with the system controls.
-- Search: chats by name, messages by text (server for plain chats, on this phone for encrypted ones).
-- Group details: members, rename, leave.
-- Notifications without a push service: a foreground service long-polls the server. Android always shows a foreground service's notification (a switched-off channel does not hide it from Android 13 on), so Ember makes it silent, minimal and iconless in the status bar, and offers 15 minute checks with no notification at all as a setting. Messages (reply and mark as read from the shade), calls (answer or decline), nudges (buzz, no sound).
-- Layouts: portrait, landscape (one thing at a time on a phone), and a multi-pane layout for 1000dp and wider windows (Samsung DeX, desktop mode, tablets). Mouse right-click opens the message menu, Enter sends and Shift+Enter adds a line.
-- Light, dark and optional wallpaper colours.
+1. Download `Ember-x.y.z.apk` from the [latest release](../../releases/latest).
+2. Open it. Android asks once to allow installs from your browser or files app.
+3. Enter your server address and sign in, or create an account.
+
+Updates arrive through the app. Ember checks this repository's releases once an hour, posts one notification per version, and installs through Android's installer. Android only accepts an update signed with the same key as the installed app. The switch is under Settings, Notifications and sounds.
+
+## Features
+
+**Chats**
+- Direct and group chats with replies, reactions, edits, pins, forwarding and nudges.
+- Photos, videos, GIFs, stickers, files and voice notes. Photos and videos can be sent in HD or standard quality, with a caption.
+- Stickers and GIFs from your own pictures, from Signal's public sticker packs, Google's animated Noto emoji, nekos.best and Wikimedia Commons. Giphy and Imgur work once you paste a key of your own. Searches go from the phone to the service directly.
+- Group members can be added by anyone in the group and removed by whoever made it. Groups can be renamed and given a picture.
+- Search by chat name and by message text.
+- Spell check in the message box, using the spell checker selected in Android. The keyboard's own autocorrect is switched off in that field.
+- Wallpapers: doodles in your accent colour, gradient, dots, plain, or a photo.
+
+**Calls**
+- One-to-one and group, voice and video, through LiveKit.
+- Pre-call screen with camera lens choice and microphone check, screen sharing, audio output choice, picture in picture.
+- Registered with Android Telecom, so Bluetooth headsets and watches can answer, mute and end a call.
+
+**Accounts and privacy**
+- Create an account from the sign-in screen. An invite code is used when the server needs one.
+- Optional two-step sign-in with an authenticator app and recovery codes.
+- Friend codes, contact requests, blocking, username and password changes.
+- End-to-end encrypted chats (Hearth E2EE v2). Keys are set up per phone and chat text and files are sealed on the phone. Calls in encrypted chats use the same derived media key as the web client.
+
+**Backups** (details in [docs/BACKUPS.md](docs/BACKUPS.md))
+- Automatic backups at a time of day you choose, to any number of places: your Hearth server, a folder (including Google Drive, OneDrive, Proton Drive and Dropbox through their apps), WebDAV or Nextcloud, S3-compatible storage, FTP or FTPS, SFTP.
+- Sealed with AES-256-GCM using a key your account holds. The key also sits in each backup under your account password.
+- First sign-in on a new phone offers to restore the newest backup.
+- The [Backup Reader](tools/backup-reader) opens backups on Windows, macOS and Linux.
+
+**Notifications**
+- Instant delivery keeps a connection open, which makes Android show one small silent notification. With it off, Ember checks every 15 minutes and calls do not ring while the app is closed.
+- Messages (reply and mark as read from the shade), calls (answer or decline) and nudges.
+
+**Layouts**
+- Portrait, landscape, and a multi-pane layout for windows of 1000 dp or wider (tablets, Samsung DeX).
+- Mouse right-click opens the message menu. Enter sends, Shift+Enter adds a line.
+- Light and dark.
+
+## How it works
+
+- Talks to the Hearth server over its HTTP and WebSocket API ([docs/API.md](https://github.com/modnite/hearth-server/blob/main/docs/API.md)). Needs a server that has `GET /api/backup/key` and the group member routes. Hearth server 1.0.0 or later has both.
+- Notifications use a foreground service that long-polls the server. No push provider is involved.
+- Chat history for encrypted chats is searched on the phone.
+- State lives on the phone and on your server. Nothing goes through other services except the optional sticker and GIF searches.
 
 ## Build
 
-Needs JDK 17 and the Android SDK (compileSdk 35). From this folder:
+Needs JDK 17 and the Android SDK (compileSdk 35). LiveKit's audio helper comes from JitPack, which `settings.gradle.kts` must keep.
 
 ```bash
 ./gradlew assembleDebug        # app/build/outputs/apk/debug/app-debug.apk
-./gradlew testDebugUnitTest    # JVM unit tests
-./gradlew assembleRelease      # signed with keystore.properties, else with the debug key (installs and updates in place)
+./gradlew testDebugUnitTest
+./gradlew assembleRelease      # signed with keystore.properties, else with the debug key
 ```
 
-LiveKit's audio helper comes from JitPack, so the repository list in `settings.gradle.kts` must keep it.
+Signing, releasing and testing against a scratch server are in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
-## Signing a release
+## Repository
 
-Create a key once and keep it safe. Losing it means users cannot update in place.
+| Path | Contents |
+|---|---|
+| `app/` | The Android app |
+| `tools/backup-reader/` | Desktop Backup Reader (Compose Multiplatform) |
+| `tools/open_archive.py` | Command line reader for archives |
+| `docs/` | Backups, development notes, screenshots |
+| `CHANGELOG.md` | One line per release |
 
-```bash
-keytool -genkeypair -v -keystore ember-release.jks -alias ember -keyalg RSA -keysize 4096 -validity 10000
-```
+## Milestones
 
-Then create `keystore.properties` next to `gradlew` (it is git-ignored):
+| Version | Scope | State |
+|---|---|---|
+| 0.1 | Chats, calls, E2EE, notifications, in-app updates | Done |
+| 0.2 to 0.3 | Camera, video, stickers, GIFs, call polish, nudges | Done |
+| 0.4 to 0.6 | Backups with an account key, password-wrapped key, Backup Reader, wallpapers | Done |
+| 0.7 to 0.8 | Open sign-up, two-step sign-in, friend codes, account changes, keyboard-safe settings | Done |
+| 0.9 | S3, FTP and SFTP places, restore on first sign-in, group management, update notifier, spell check | Done |
+| 1.0 | Stable release | Done |
 
-```properties
-storeFile=ember-release.jks
-storePassword=...
-keyAlias=ember
-keyPassword=...
-```
+### Open items
 
-`./gradlew assembleRelease` then produces a signed `app-release.apk`. Raise `versionCode` in `app/build.gradle.kts` for every release.
+- [ ] Hourly update check confirmed on a phone over several hours
+- [ ] Emoji search keyboard handoff on Samsung phones (changed in 0.9.4, not confirmed on the phone that reported it)
+- [ ] Viewing someone else's screen share (built, tested from the sharing side only)
+- [ ] Calls in encrypted chats with Chromium and Safari clients (checked with Firefox and the native SDK)
+- [ ] Search over encrypted chats beyond messages already loaded
+- [ ] UnifiedPush
+- [ ] XP-style theme
+- [ ] Licence file (none yet)
 
-## Installing and updating
+## Credits
 
-Download `Ember-x.y.z.apk` from the [latest release](../../releases/latest) and open it (Android asks once to allow installs from your browser or files app). Ember checks this repository's releases by itself about once an hour, even while the app is closed, and posts a notification (once per version) that opens the update; Settings has a switch, "Tell me about updates". When there is a newer version it offers the update, downloads it and hands it to Android's installer. Settings → the version line at the bottom also checks on a tap. Android only accepts an update signed with the same key as the installed app, so a file from anywhere else cannot replace Ember.
-
-## Making a release
-
-1. Raise `versionCode` and `versionName` in `app/build.gradle.kts`.
-2. `./gradlew assembleRelease` (needs `keystore.properties`, see above) and check the output with `apksigner verify --print-certs`.
-3. Rename the file `Ember-<versionName>.apk`, create a GitHub release tagged `v<versionName>` and attach it, with a few lines of notes (they show in the update dialog).
-
-```bash
-gh release create v0.1.0 Ember-0.1.0.apk --title "Ember 0.1.0" --notes "What changed"
-```
-
-The release key (`ember-release.jks`) is never committed. Keep a copy somewhere safe: without it nobody can update in place.
-
-## Using it
-
-Open the app, enter your server address, sign in (or use an invite code). The first time you open an encrypted chat, choose "Set up on this phone". Turn on "Message and call alerts" in Settings to get notifications while the app is closed, and allow Ember to run without battery limits when it asks.
-
-## Testing against a scratch server
-
-`tools/scratch` in the repository root has a scratch Hearth server, a LiveKit dev setup and bots that join calls. Never point tests at a production server. Useful pieces: `start-hearth.sh`, `seed.mjs` (creates a second user and a conversation), `call-bot.mjs` (joins a call; set `BOT_TONE=1` for sound, `BOT_DUMP=path` to save a received camera frame), `nudge.mjs`.
-With a phone over `adb`, `adb reverse tcp:18200 tcp:18200` lets the app reach the scratch server as `http://localhost:18200`.
-
-## Known limits
-
-- Calls in encrypted chats were checked against the web client (Firefox) and the native LiveKit SDK: audio and video decrypt both ways. A Chromium/Safari browser has not been tried.
-- Viewing someone else's screen share is built and uses the same tracks as the web client, but has only been checked from the sharing side.
-- Searching encrypted chats only covers messages already loaded on the phone.
-- Android Telecom integration (system call UI, Bluetooth and watch call controls) is not built. UnifiedPush is not supported either.
-- The XP look is intentionally absent and will come as a separate theme later.
-
-## Licence note
-
-Nothing is copied from other messengers. Element X Android (AGPL) was read for patterns only. If code from an AGPL project is ever copied in, Ember would have to be released under the AGPL as well.
+Nothing is copied from other messengers. Element X Android (AGPL) was read for patterns. If code from an AGPL project is ever copied in, Ember has to be released under the AGPL.
