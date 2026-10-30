@@ -7,6 +7,9 @@ import okhttp3.mockwebserver.MockWebServer
 import org.hearth.ember.data.ArchiveCipher
 import org.hearth.ember.data.BackupException
 import org.hearth.ember.data.BackupNames
+import org.hearth.ember.data.BackupRun
+import org.hearth.ember.data.BackupScheduler
+import org.hearth.ember.data.Schedule
 import org.hearth.ember.data.WebDav
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -115,5 +118,30 @@ class BackupModelTest {
         assertEquals(15 * hour, org.hearth.ember.data.BackupScheduler.delayUntil(3 * 60, noon, zone)) // 03:00 has passed: tomorrow
         assertEquals(2 * hour, org.hearth.ember.data.BackupScheduler.delayUntil(14 * 60, noon, zone))
         assertEquals(24 * hour, org.hearth.ember.data.BackupScheduler.delayUntil(12 * 60, noon, zone)) // exactly now: tomorrow
+    }
+
+    // ---- a missed scheduled backup is caught up
+    private val hour = 3_600_000L
+    private fun run(at: Long, ok: Boolean = true) = BackupRun(at, ok, "")
+
+    @Test fun nothingIsOverdueWhenAutomaticBackupsAreOffOrThereIsNowhereToSave() {
+        assertFalse(BackupScheduler.isOverdue(Schedule.Off, true, emptyList(), 100 * 24 * hour))
+        assertFalse(BackupScheduler.isOverdue(Schedule.Daily, false, emptyList(), 100 * 24 * hour))
+    }
+
+    @Test fun aBackupIsOverdueOnceTheScheduleAndAGraceHaveGoneBy() {
+        val now = 10 * 24 * hour
+        assertFalse(BackupScheduler.isOverdue(Schedule.Daily, true, listOf(run(now - 23 * hour)), now))
+        assertFalse(BackupScheduler.isOverdue(Schedule.Daily, true, listOf(run(now - 24 * hour - 20 * 60_000L)), now))
+        assertTrue(BackupScheduler.isOverdue(Schedule.Daily, true, listOf(run(now - 25 * hour)), now))
+        assertTrue(BackupScheduler.isOverdue(Schedule.Daily, true, emptyList(), now))
+    }
+
+    @Test fun aPlaceThatKeepsFailingIsNotRetriedAtEveryOpening() {
+        val now = 10 * 24 * hour
+        val failedJustNow = listOf(run(now - 40 * hour), run(now - 10 * 60_000L, ok = false))
+        assertFalse(BackupScheduler.isOverdue(Schedule.Daily, true, failedJustNow, now))
+        val failedLongAgo = listOf(run(now - 40 * hour), run(now - 2 * hour, ok = false))
+        assertTrue(BackupScheduler.isOverdue(Schedule.Daily, true, failedLongAgo, now))
     }
 }

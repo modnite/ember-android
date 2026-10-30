@@ -87,13 +87,18 @@ class BackupService(private val app: EmberApp, private val context: Context) {
     }
 
     /** Put a backup back on this phone: the key first, then the settings and the stickers. Returns a short description of what was restored. */
-    /** What a restore is doing right now, or null; every screen's activity bar shows it. */
-    private val _restoring = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
-    val restoring: kotlinx.coroutines.flow.StateFlow<String?> = _restoring
+    /** What a backup or a restore is doing right now, or null. The strip across every screen, the backup page and the notification show it. */
+    private val _activity = kotlinx.coroutines.flow.MutableStateFlow<BackupActivity?>(null)
+    val activity: kotlinx.coroutines.flow.StateFlow<BackupActivity?> = _activity
+
+    private var activeJob: kotlinx.coroutines.Job? = null
+
+    /** Stop the backup that is running (a restore cannot be stopped half way). */
+    fun cancel() { activeJob?.cancel() }
 
     suspend fun apply(file: ByteArray, passphrase: String?, password: String? = null): String {
-        _restoring.value = "Restoring your settings and keys\u2026"
-        try { return applyInner(file, passphrase, password) } finally { _restoring.value = null }
+        _activity.value = BackupActivity(true, "Restoring your settings and keys\u2026", false)
+        try { return applyInner(file, passphrase, password) } finally { _activity.value = null }
     }
 
     private suspend fun applyInner(file: ByteArray, passphrase: String?, password: String?): String {
@@ -133,7 +138,11 @@ class BackupService(private val app: EmberApp, private val context: Context) {
     private fun workDir() = File(context.cacheDir, "backups").also { it.mkdirs(); it.listFiles()?.forEach { f -> f.delete() } }
 
     /** Back up now to every destination. One destination failing does not stop the others; each gets its own result, remembered for the settings page. */
-    suspend fun runNow(progress: (String) -> Unit = {}): List<Pair<Destination, BackupRun>> = runLock.withLock { withContext(Dispatchers.IO) {
+    suspend fun runNow(onProgress: (String) -> Unit = {}): List<Pair<Destination, BackupRun>> = runLock.withLock { withContext(Dispatchers.IO) {
+        // What this backup is doing is published for every screen to show, and the running job is kept so Cancel can stop it.
+        val progress: (String) -> Unit = { text -> _activity.value = BackupActivity(false, text, true); onProgress(text) }
+        activeJob = currentCoroutineContext()[kotlinx.coroutines.Job]
+        progress("Starting…")
         val destinations = settings.destinations
         if (destinations.isEmpty()) throw BackupException("Add a place to back up to first.")
         val key = key()
@@ -164,6 +173,8 @@ class BackupService(private val app: EmberApp, private val context: Context) {
             if (archive != null && results.all { it.second.ok }) settings.archiveStamp = stamp
             results
         } finally {
+            activeJob = null
+            _activity.value = null
             dir.listFiles()?.forEach { it.delete() }
         }
     } }
@@ -193,13 +204,16 @@ class BackupService(private val app: EmberApp, private val context: Context) {
     }
 
     suspend fun restoreFrom(d: Destination, name: String, passphrase: String?, password: String? = null): String {
-        _restoring.value = "Reading the backup from ${d.label}\u2026"
+        _activity.value = BackupActivity(true, "Reading the backup from ${d.label}\u2026", false)
         try {
             val bytes = withContext(Dispatchers.IO) {
                 val file = File(workDir(), name)
                 try { target(d).get(name, file); file.readBytes() } finally { file.delete() }
             }
             return apply(bytes, passphrase, password)
-        } finally { _restoring.value = null }
+        } finally { _activity.value = null }
     }
 }
+
+/** A backup or a restore that is going on right now. */
+data class BackupActivity(val restore: Boolean, val text: String, val canCancel: Boolean)

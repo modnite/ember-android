@@ -130,39 +130,18 @@ fun BackupRows() {
     var davPass by remember { mutableStateOf("") }
     var label by remember { mutableStateOf("") }
     var turningOn by remember { mutableStateOf(false) }
-    // A backup runs in the background (foreground job with a notification), not in this page: leaving the page changes nothing, and it
-    // stops only when cancelled here or from its notification. This page just watches it.
-    val work by BackupScheduler.state(context).collectAsState(initial = null)
-    val backingUp = work?.state?.let { it == androidx.work.WorkInfo.State.RUNNING || it == androidx.work.WorkInfo.State.ENQUEUED || it == androidx.work.WorkInfo.State.BLOCKED } == true
-    val busy = progress != null || backingUp
-    var wasBackingUp by remember { mutableStateOf(false) }
+    // A backup belongs to the app: what it is doing comes from the app itself, so it is on this page and in the strip on every other screen,
+    // and it goes on when this page is left.
+    val activity by app.backup.activity.collectAsState()
+    val backingUp = activity?.restore == false
+    val busy = progress != null || activity != null
 
     fun say(text: String) = Toast.makeText(context, text, Toast.LENGTH_LONG).show()
     fun problem(e: Throwable) = say(e.message ?: "Something went wrong.")
     fun reschedule() = BackupScheduler.apply(context, settings)
 
     fun backUpNow() {
-        BackupScheduler.runNow(context)
-        say("Backing up in the background. You can leave this page.")
-    }
-
-    // Tell what happened when a backup that was running while this page was open ends.
-    androidx.compose.runtime.LaunchedEffect(backingUp, work?.state) {
-        if (wasBackingUp && !backingUp) {
-            val info = work
-            when (info?.state) {
-                androidx.work.WorkInfo.State.CANCELLED -> say("Backup cancelled.")
-                androidx.work.WorkInfo.State.SUCCEEDED -> {
-                    val error = info.outputData.getString("error")
-                    val failed = info.outputData.getString("failed").orEmpty()
-                    val places = info.outputData.getInt("places", 0)
-                    say(error ?: if (failed.isEmpty()) "Backed up to $places ${if (places == 1) "place" else "places"}." else failed)
-                }
-                androidx.work.WorkInfo.State.FAILED -> say("The backup failed.")
-                else -> {}
-            }
-        }
-        wasBackingUp = backingUp
+        BackupScheduler.startManual(context)
     }
 
     val addFolder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri: Uri? ->
@@ -219,12 +198,11 @@ fun BackupRows() {
         if (settings.destinations.isEmpty()) say("Add a place to keep backups first.") else if (!busy) backUpNow()
     }
     if (backingUp) {
-        val text = work?.progress?.getString("text") ?: if (work?.state == androidx.work.WorkInfo.State.ENQUEUED) "Waiting for a connection…" else "Starting…"
-        Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 56.dp, end = 20.dp))
+        Text(activity?.text.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 56.dp, end = 20.dp))
         LinearProgressIndicator(Modifier.fillMaxWidth().padding(start = 56.dp, end = 20.dp, top = 6.dp, bottom = 6.dp))
         Row(Modifier.fillMaxWidth().padding(start = 48.dp, end = 20.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text("It keeps going if you leave this page or close the app.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f).padding(start = 8.dp))
-            TextButton(onClick = { BackupScheduler.cancelNow(context) }) { Text("Cancel backup") }
+            Text("It keeps going through the app, and in the background if you leave it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f).padding(start = 8.dp))
+            TextButton(onClick = { BackupScheduler.cancel(context) }) { Text("Cancel backup") }
         }
     } else progress?.let {
         Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 56.dp, end = 20.dp))
@@ -492,6 +470,7 @@ fun RestoreOnSignIn(server: String, username: String, password: String, onClose:
                         Choice("A file", "Open a backup you saved") { openFile.launch(arrayOf("*/*")) }
                         Choice("WebDAV or Nextcloud", "The newest backup on your server") { step = 1 }
                     }
+                    ActivityLine()
                 }
             },
             confirmButton = { TextButton(onClick = onClose) { Text("Cancel") } },
@@ -505,6 +484,7 @@ fun RestoreOnSignIn(server: String, username: String, password: String, onClose:
                     OutlinedTextField(user, { user = it }, singleLine = true, label = { Text("Username") })
                     OutlinedTextField(davPass, { davPass = it }, singleLine = true, label = { Text("Password or app password") }, visualTransformation = PasswordVisualTransformation())
                     if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+                    ActivityLine()
                 }
             },
             confirmButton = { TextButton(enabled = url.isNotBlank() && !busy, onClick = { fromServer(dav, null) }) { Text("Restore") } },

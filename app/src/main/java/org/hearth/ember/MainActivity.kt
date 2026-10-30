@@ -190,7 +190,14 @@ private fun EmberRoot(pendingRoom: androidx.compose.runtime.MutableState<String?
 
     DisposableEffect(lifecycle) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) app.repo.onForeground()
+            // Leaving the app while a backup runs: a notification keeps it alive. Coming back: the strip takes over again.
+            if (event == Lifecycle.Event.ON_STOP) org.hearth.ember.data.BackupKeepAlive.onLeft(app)
+            if (event == Lifecycle.Event.ON_RESUME) {
+                org.hearth.ember.data.BackupKeepAlive.onReturned(app)
+                app.repo.onForeground()
+                // A scheduled backup Android did not run (phone off, no network, battery low) starts now.
+                org.hearth.ember.data.BackupScheduler.catchUp(app)
+            }
         }
         lifecycle.addObserver(observer)
         onDispose { lifecycle.removeObserver(observer) }

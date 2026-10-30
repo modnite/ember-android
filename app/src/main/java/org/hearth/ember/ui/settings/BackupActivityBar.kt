@@ -28,28 +28,22 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.work.WorkInfo
+import org.hearth.ember.data.BackupActivity
 import org.hearth.ember.data.BackupScheduler
 import org.hearth.ember.ember
 
-/** A backup or a restore that is going on right now, wherever in the app you are. */
-data class BackupActivity(val restore: Boolean, val text: String, val canCancel: Boolean)
-
-/** What is going on, from the background backup job and the restore, as one thing every screen can show. Null when nothing is. */
+/** What is going on, as one thing every screen can show. Null when nothing is. */
 @Composable
-fun rememberBackupActivity(): State<BackupActivity?> {
-    val context = LocalContext.current
-    val app = context.ember
-    val work by BackupScheduler.state(context).collectAsState(initial = null)
-    val restoring by app.backup.restoring.collectAsState()
-    return remember {
-        derivedStateOf {
-            val running = work?.state?.let { it == WorkInfo.State.RUNNING || it == WorkInfo.State.ENQUEUED || it == WorkInfo.State.BLOCKED } == true
-            when {
-                restoring != null -> BackupActivity(true, restoring!!, false)
-                running -> BackupActivity(false, work?.progress?.getString("text") ?: if (work?.state == WorkInfo.State.ENQUEUED) "Waiting for a connection…" else "Starting…", true)
-                else -> null
-            }
+fun rememberBackupActivity(): State<BackupActivity?> = LocalContext.current.ember.backup.activity.collectAsState()
+
+/** One line and a bar for whatever backup or restore is going on, to put inside a dialog or a page. Nothing when none is. */
+@Composable
+fun ActivityLine(modifier: Modifier = Modifier) {
+    val a by LocalContext.current.ember.backup.activity.collectAsState()
+    a?.let {
+        Column(modifier.fillMaxWidth().padding(top = 8.dp)) {
+            Text(it.text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 4.dp))
         }
     }
 }
@@ -70,7 +64,7 @@ fun BackupActivityBar(activity: BackupActivity, padStatusBar: Boolean, onOpen: (
                     Text(if (activity.restore) "Restoring" else "Backing up", style = MaterialTheme.typography.labelLarge)
                     Text(activity.text, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                if (activity.canCancel) TextButton(onClick = { BackupScheduler.cancelNow(context) }) { Text("Cancel") }
+                if (activity.canCancel) TextButton(onClick = { BackupScheduler.cancel(context) }) { Text("Cancel") }
             }
             LinearProgressIndicator(Modifier.fillMaxWidth())
         }

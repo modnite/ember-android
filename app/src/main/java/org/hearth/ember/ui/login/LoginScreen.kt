@@ -1,5 +1,6 @@
 package org.hearth.ember.ui.login
 
+import androidx.compose.runtime.collectAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -203,5 +204,8 @@ fun LoginScreen() {
             Spacer(Modifier.height(24.dp))
         }
     }
+    // A restore started from here shows its progress here too, until the app itself takes over.
+    val activity by app.backup.activity.collectAsState()
+    activity?.let { a -> org.hearth.ember.ui.settings.BackupActivityBar(a, padStatusBar = true) {} }
     if (restoring) org.hearth.ember.ui.settings.RestoreOnSignIn(server, username, password) { restoring = false }
 }
