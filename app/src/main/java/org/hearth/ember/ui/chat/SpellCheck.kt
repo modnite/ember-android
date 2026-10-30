@@ -27,9 +27,13 @@ class SpellChecker(context: Context) {
     private val manager = context.getSystemService(Context.TEXT_SERVICES_MANAGER_SERVICE) as? TextServicesManager
     private var session: SpellCheckerSession? = null
     private var waiting: ((Array<SentenceSuggestionsInfo>?) -> Unit)? = null
+    private var waitingWords: ((Array<SuggestionsInfo>?) -> Unit)? = null
 
     private val listener = object : SpellCheckerSession.SpellCheckerSessionListener {
-        override fun onGetSuggestions(results: Array<SuggestionsInfo>?) {}
+        override fun onGetSuggestions(results: Array<SuggestionsInfo>?) {
+            waitingWords?.invoke(results)
+            waitingWords = null
+        }
         override fun onGetSentenceSuggestions(results: Array<SentenceSuggestionsInfo>?) {
             waiting?.invoke(results)
             waiting = null
@@ -51,9 +55,32 @@ class SpellChecker(context: Context) {
             waiting = { cont.resume(it) }
             cont.invokeOnCancellation { waiting = null }
             runCatching { s.getSentenceSuggestions(arrayOf(TextInfo(text)), 5) }.onFailure { waiting = null; if (cont.isActive) cont.resume(null) }
-        } ?: return emptyList()
-        return parse(text, results)
+        }
+        val fromSentence = results?.let { parse(text, it) }.orEmpty()
+        // Sentence answers are the best (they know the context); a spell checker that gives none is asked word by word instead.
+        if (results != null && results.any { it.suggestionsCount > 0 }) return fromSentence
+        return checkWords(s, text)
     }
+
+    private suspend fun checkWords(s: SpellCheckerSession, text: String): List<SpellError> {
+        val words = Regex("[\\p{L}'\u2019-]+").findAll(text).filter { isCheckable(it.value) }.take(60).toList()
+        if (words.isEmpty()) return emptyList()
+        val answers = suspendCancellableCoroutine<Array<SuggestionsInfo>?> { cont ->
+            waitingWords = { cont.resume(it) }
+            cont.invokeOnCancellation { waitingWords = null }
+            runCatching { s.getSuggestions(words.map { TextInfo(it.value) }.toTypedArray(), 4, false) }.onFailure { waitingWords = null; if (cont.isActive) cont.resume(null) }
+        } ?: return emptyList()
+        val out = ArrayList<SpellError>()
+        for ((i, w) in words.withIndex()) {
+            val info = answers.getOrNull(i) ?: continue
+            if (!isMistake(info.suggestionsAttributes, info.suggestionsCount)) continue
+            out.add(SpellError(w.range.first, w.range.last + 1, (0 until info.suggestionsCount).map { info.getSuggestionAt(it) }.filter { it != w.value }.take(4)))
+        }
+        return out
+    }
+
+    /** Is a spell checker switched on in Android's settings? (Without one there is nothing to check with.) */
+    fun available(): Boolean = open() != null
 
     fun close() { runCatching { session?.close() }; session = null }
 

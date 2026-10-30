@@ -698,7 +698,7 @@ private fun Composer(
                         onSend(); true
                     } else false
                 }
-                val options = KeyboardOptions(imeAction = if (enterSends) ImeAction.Send else ImeAction.Default, capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Sentences, autoCorrectEnabled = true)
+                val options = KeyboardOptions(imeAction = if (enterSends) ImeAction.Send else ImeAction.Default, capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Sentences, autoCorrectEnabled = false)
                 val actions = androidx.compose.foundation.text.KeyboardActions(onSend = { onSend() })
                 androidx.compose.foundation.text.BasicTextField(
                     value = tfv, modifier = fieldModifier, maxLines = 6,
