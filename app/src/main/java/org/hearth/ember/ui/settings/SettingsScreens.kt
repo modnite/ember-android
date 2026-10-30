@@ -27,7 +27,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.BatteryAlert
 import androidx.compose.material.icons.filled.BatteryChargingFull
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.DarkMode
@@ -202,6 +204,8 @@ private fun NotificationsPage() {
             ) { app.prefs.setInstantDelivery(it); Delivery.apply(app) }
             if (notifications) ToggleRow(Icons.Filled.Visibility, "Show message text", "Off shows only “New message” on the lock screen", previews) { app.prefs.setPreviews(it) }
             UpdateNotifyRow()
+            val lowBattery by app.prefs.lowBatteryAlerts.collectAsState()
+            ToggleRow(Icons.Filled.BatteryAlert, "Low battery in calls", "Warns you and the others at 20, 15, 10 and 5 percent", lowBattery) { app.prefs.setLowBatteryAlerts(it) }
             if (notifications) ActionRow(Icons.Filled.BatteryChargingFull, "Battery", "Let Ember run without being put to sleep") {
                 val pm = context.getSystemService(PowerManager::class.java)
                 val intent = if (pm.isIgnoringBatteryOptimizations(context.packageName)) Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
@@ -301,6 +305,31 @@ private fun ChatsPage() {
     val spellCheck by app.prefs.spellCheck.collectAsState()
     val spellAvailable = remember { val c = org.hearth.ember.ui.chat.SpellChecker(app); val ok = c.available(); c.close(); ok }
     ToggleRow(Icons.Filled.Keyboard, "Check spelling", if (spellAvailable) "Underline misspelt words in the message box" else "Switch on a spell checker in Android Settings, General management, Keyboard list and defaults, Spell checker", spellCheck) { on -> app.prefs.setSpellCheck(on) }
+    var spellReport by remember { mutableStateOf<String?>(null) }
+    val spellScope = rememberCoroutineScope()
+    ActionRow(Icons.Filled.Keyboard, "Test spell checking", "Shows what your spell checker says") {
+        spellScope.launch {
+            val sample = "this is a tesst of spelllcheck"
+            val checker = org.hearth.ember.ui.chat.SpellChecker(app)
+            val found = if (checker.available()) checker.check(sample) else null
+            checker.close()
+            val id = android.provider.Settings.Secure.getString(app.contentResolver, "selected_spell_checker").orEmpty()
+            val label = runCatching {
+                val pkg = id.substringBefore('/')
+                app.packageManager.getApplicationLabel(app.packageManager.getApplicationInfo(pkg, 0)).toString() + " (" + pkg + ")"
+            }.getOrDefault(id.ifBlank { "none selected" })
+            spellReport = "Spell checker: $label\nSample: $sample\n" + when {
+                found == null -> "The phone gave no spell checker to use. Switch one on in Android Settings, General management, Keyboard list and defaults."
+                found.isEmpty() -> "Nothing was marked. The spell checker did not flag the sample for this language."
+                else -> found.joinToString("\n") { "Marked: " + sample.substring(it.start, it.end) + if (it.suggestions.isNotEmpty()) " (" + it.suggestions.joinToString(", ") + ")" else "" }
+            }
+        }
+    }
+    spellReport?.let { text ->
+        AlertDialog(onDismissRequest = { spellReport = null }, title = { Text("Spell checking") }, text = { Text(text) }, confirmButton = { TextButton(onClick = { spellReport = null }) { Text("Close") } })
+    }
+    val crashReports by app.prefs.crashReports.collectAsState()
+    ToggleRow(Icons.Filled.BugReport, "Send crash reports", "To your Hearth server, so a fix can be made", crashReports) { on -> app.prefs.setCrashReports(on) }
     val sendHd by app.prefs.sendHd.collectAsState()
     ToggleRow(Icons.Filled.PhotoLibrary, "Send photos and videos in HD", "Sharper and larger. Off sends a smaller copy that arrives faster.", sendHd) { on -> app.prefs.setSendHd(on) }
     val nudgeButton by app.prefs.nudgeButton.collectAsState()

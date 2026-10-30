@@ -50,6 +50,7 @@ class EmberApp : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         store = SessionStore(this)
+        org.hearth.ember.data.CrashReporter.install(this)
         client = OkHttpClient.Builder()
             .cookieJar(PersistentCookieJar(store))
             // "localhost" always means this phone, even when a VPN's DNS cannot answer for it (a server reached through adb or a tunnel).
@@ -69,6 +70,7 @@ class EmberApp : Application(), ImageLoaderFactory {
         callNotifier = CallNotifier(this)
         callController = org.hearth.ember.call.CallController(this)
         notifier.createChannels()
+        scope.launch(kotlinx.coroutines.Dispatchers.IO) { runCatching { org.hearth.ember.data.CrashReporter.sendPending(this@EmberApp) } }
         org.hearth.ember.data.UpdateWorker.schedule(this)
         // An old "update ready" notice does not outlive the update itself.
         if (!org.hearth.ember.data.Versions.isNewer(updater.lastNotified, BuildConfig.VERSION_NAME)) org.hearth.ember.data.UpdateNotice.clear(this)

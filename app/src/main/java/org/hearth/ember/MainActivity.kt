@@ -105,6 +105,8 @@ class MainActivity : ComponentActivity() {
             return
         }
         // Debug builds only: run the background update check once, now (adb shell am start -a org.hearth.ember.TEST_UPDATE_CHECK).
+        // Debug builds only: crash on purpose, to see the report arrive (adb shell am start -a org.hearth.ember.TEST_CRASH).
+        if (BuildConfig.DEBUG && intent?.action == "org.hearth.ember.TEST_CRASH") throw IllegalStateException("Test crash from the debug intent")
         if (BuildConfig.DEBUG && intent?.action == "org.hearth.ember.TEST_UPDATE_CHECK") {
             androidx.work.WorkManager.getInstance(this).enqueue(androidx.work.OneTimeWorkRequestBuilder<org.hearth.ember.data.UpdateWorker>().build())
             return

@@ -34,13 +34,14 @@ Updates arrive through the app. Ember checks this repository's releases once an 
 - Stickers and GIFs from your own pictures, from Signal's public sticker packs, Google's animated Noto emoji, nekos.best and Wikimedia Commons. Giphy and Imgur work once you paste a key of your own. Searches go from the phone to the service directly.
 - Group members can be added by anyone in the group and removed by whoever made it. Groups can be renamed and given a picture.
 - Search by chat name and by message text.
-- Spell check in the message box, using the spell checker selected in Android. The keyboard's own autocorrect is switched off in that field.
+- Spell check in the message box, using the spell checker selected in Android. The keyboard's own autocorrect is switched off in that field. Settings, Chats and calls, Test spell checking shows which spell checker the phone uses and what it marks in a sample sentence.
 - Wallpapers: doodles in your accent colour, gradient, dots, plain, or a photo.
 
 **Calls**
 - One-to-one and group, voice and video, through LiveKit.
 - Pre-call screen with camera lens choice and microphone check, screen sharing, audio output choice, picture in picture.
 - Registered with Android Telecom, so Bluetooth headsets and watches can answer, mute and end a call.
+- Low battery warnings: at 20, 15, 10 and 5 percent you get a notification and a banner telling you to plug in and use a fast charger, and the others in the call see "Name's battery is at 15%". The banner goes away when you plug in. Switch: Settings, Notifications and sounds, Low battery in calls.
 
 **Accounts and privacy**
 - Create an account from the sign-in screen. An invite code is used when the server needs one.
@@ -53,6 +54,9 @@ Updates arrive through the app. Ember checks this repository's releases once an 
 - Sealed with AES-256-GCM using a key your account holds. The key also sits in each backup under your account password.
 - First sign-in on a new phone offers to restore the newest backup.
 - The [Backup Reader](tools/backup-reader) opens backups on Windows, macOS and Linux.
+
+**Crash reports**
+- When Ember crashes it saves the report on the phone and sends it to your Hearth server at the next start, where an administrator reads it under Crashes. Nothing goes anywhere else. Settings, Chats and calls, Send crash reports switches it off.
 
 **Notifications**
 - Instant delivery keeps a connection open, which makes Android show one small silent notification. With it off, Ember checks every 15 minutes and calls do not ring while the app is closed.
@@ -102,9 +106,13 @@ Signing, releasing and testing against a scratch server are in [docs/DEVELOPMENT
 | 0.7 to 0.8 | Open sign-up, two-step sign-in, friend codes, account changes, keyboard-safe settings | Done |
 | 0.9 | S3, FTP and SFTP places, restore on first sign-in, group management, update notifier, spell check | Done |
 | 1.0 | Stable release | Done |
+| 1.1 | Low battery warnings in calls, crash reports to the server, spell check test | Done |
 
 ### Open items
 
+- [ ] Which side of a call picture is flipped on Samsung front cameras (reported for your own preview and for other people's pictures, in Ember and in the web app). Needs a test on the phone
+- [ ] Spell check confirmed on a Samsung phone (works on the emulator; use Test spell checking on the phone)
+- [ ] Low battery messages from another phone seen on a second device (sending and the local warning are verified on the emulator)
 - [ ] Hourly update check confirmed on a phone over several hours
 - [ ] Emoji search keyboard handoff on Samsung phones (changed in 0.9.4, not confirmed on the phone that reported it)
 - [ ] Viewing someone else's screen share (built, tested from the sharing side only)

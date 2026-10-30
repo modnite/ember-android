@@ -2,6 +2,12 @@
 
 One entry per release. All dates are 2026.
 
+## 1.1.0 (30 Oct)
+- Low battery in calls: a warning at 20, 15, 10 and 5 percent (notification and banner, plug in and use a fast charger), and the others in the call are told. Switch under Notifications and sounds.
+- Crash reports are sent to your Hearth server at the next start. Switch under Chats and calls.
+- Settings, Chats and calls, Test spell checking: shows the spell checker in use and what it marks in a sample.
+- Backup Reader packages for Windows, macOS and Linux are attached to the releases again.
+
 ## 1.0.0 (30 Oct)
 - The update notification switch moved under Notifications and sounds.
 

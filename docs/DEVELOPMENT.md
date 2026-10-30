@@ -73,6 +73,28 @@ adb shell am start -a org.hearth.ember.TEST_UPDATE_CHECK -n org.hearth.ember.deb
 
 Do not force-stop the app afterwards. That clears its notifications.
 
+## Testing crash reports
+
+Sign in to a server that has `POST /api/crash-reports` (hearth-server 1.1.0 or later). In a debug build:
+
+```bash
+adb shell am start -a org.hearth.ember.TEST_CRASH -n org.hearth.ember.debug/org.hearth.ember.MainActivity
+```
+
+The app crashes and writes `files/crash-reports/<time>.json`. Start it again and the file is sent and deleted. The report appears under Crashes in the admin panel.
+
+## Testing low battery warnings
+
+Join a call, then on the emulator:
+
+```bash
+adb shell dumpsys battery unplug
+adb shell dumpsys battery set level 19
+adb shell dumpsys battery reset
+```
+
+Each step below 20, 15, 10 and 5 percent gives one notification and one banner. Plugging in (`dumpsys battery set ac 1`) clears them.
+
 ## Layout notes
 
 - Every screen is checked in portrait and landscape, and with the keyboard open. Fields must stay visible.

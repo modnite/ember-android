@@ -54,7 +54,10 @@ import androidx.compose.material.icons.filled.VoiceOverOff
 import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Hearing
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material.icons.filled.BatteryAlert
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -475,7 +478,6 @@ private fun InCall(controller: CallController, state: CallState, pip: Boolean, o
     }
 }
 
-@Composable
 /** Low battery, yours (with what to do) and other people's, over the top of the call. */
 @Composable
 private fun BatteryBanner(state: CallState, modifier: Modifier = Modifier) {
@@ -498,6 +500,7 @@ private fun BatteryBanner(state: CallState, modifier: Modifier = Modifier) {
     }
 }
 
+@Composable
 private fun produceNow(): androidx.compose.runtime.State<Long> = androidx.compose.runtime.produceState(System.currentTimeMillis()) {
     while (true) { value = System.currentTimeMillis(); delay(1000) }
 }
