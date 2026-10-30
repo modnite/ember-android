@@ -151,7 +151,8 @@ class BackupService(private val app: EmberApp, private val context: Context) {
     private fun workDir() = File(context.cacheDir, "backups").also { it.mkdirs(); it.listFiles()?.forEach { f -> f.delete() } }
 
     /** Back up now to every destination. One destination failing does not stop the others; each gets its own result, remembered for the settings page. */
-    suspend fun runNow(onProgress: (String) -> Unit = {}): List<Pair<Destination, BackupRun>> = runLock.withLock { withContext(Dispatchers.IO) {
+    /** [force] makes a fresh chat archive even when no chat changed: "Back up now" always gives a complete backup, only the scheduled ones skip an archive that would be identical. */
+    suspend fun runNow(onProgress: (String) -> Unit = {}, force: Boolean = false): List<Pair<Destination, BackupRun>> = runLock.withLock { withContext(Dispatchers.IO) {
         // What this backup is doing is published for every screen to show, and the running job is kept so Cancel can stop it.
         val progress: (String) -> Unit = { text -> _activity.value = BackupActivity(false, text, true); onProgress(text) }
         activeJob = currentCoroutineContext()[kotlinx.coroutines.Job]
@@ -166,7 +167,7 @@ class BackupService(private val app: EmberApp, private val context: Context) {
             val core = File(dir, BackupNames.core(now)).also { it.writeBytes(make(key)) }
             // The archive is the big one. When no chat has anything new since the last complete one (and a week has not gone by) it is not made again.
             val stamp = archiveStamp()
-            val unchanged = settings.includeHistory && stamp == settings.archiveStamp && stamp.isNotEmpty() && settings.lastRuns.values.all { it.ok }
+            val unchanged = !force && settings.includeHistory && stamp == settings.archiveStamp && stamp.isNotEmpty() && settings.lastRuns.values.all { it.ok }
             val archive = if (settings.includeHistory && !unchanged) File(dir, BackupNames.archive(now)).also {
                 HistoryArchive(app).build(it, ArchiveCipher.keyed(key.bytes, key.id, envelopeFor(key)), settings.includeMedia, progress)
             } else null
@@ -180,14 +181,14 @@ class BackupService(private val app: EmberApp, private val context: Context) {
                     prune(t)
                     BackupRun(now, true, when {
                         !settings.includeHistory -> "Backed up key and settings only. Chat history is switched off."
-                        unchanged -> "Backed up (chats unchanged)"
+                        unchanged -> "Backed up. No chat changed since the last archive, so that one was kept."
                         else -> "Backed up"
-                    }, core.length() + (archive?.length() ?: 0L))
+                    }, core.length() + (archive?.length() ?: if (settings.includeHistory) settings.archiveBytes else 0L))
                 }.getOrElse { if (it is kotlinx.coroutines.CancellationException) throw it; BackupRun(now, false, it.message ?: "The backup failed.") }
                 settings.record(d.id, run)
                 d to run
             }
-            if (archive != null && results.all { it.second.ok }) settings.archiveStamp = stamp
+            if (archive != null && results.all { it.second.ok }) { settings.archiveStamp = stamp; settings.archiveAt = now; settings.archiveBytes = archive.length() }
             results
         } finally {
             activeJob = null

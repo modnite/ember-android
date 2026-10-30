@@ -66,7 +66,7 @@ object BackupScheduler {
         if (app.backup.activity.value != null) return
         app.scope.launch {
             val message = try {
-                val results = app.backup.runNow()
+                val results = app.backup.runNow(force = true)
                 val failed = results.filter { !it.second.ok }
                 if (failed.isEmpty()) "Backed up to ${results.size} ${if (results.size == 1) "place" else "places"}." else failed.joinToString("\n") { "${it.first.label}: ${it.second.message}" }
             } catch (e: kotlinx.coroutines.CancellationException) {

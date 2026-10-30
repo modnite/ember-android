@@ -354,6 +354,13 @@ fun BackupRows() {
                         TextButton(onClick = { settings.keep = settings.keep - 1 }, enabled = settings.keep > 1) { Text("−") }
                         TextButton(onClick = { settings.keep = settings.keep + 1 }, enabled = settings.keep < 30) { Text("+") }
                     }
+                    if (settings.includeHistory) {
+                        Text(
+                            if (settings.archiveAt > 0) "Newest chat archive: ${fileSize(settings.archiveBytes)}, made ${ago(settings.archiveAt)}. Back up now always makes a new one; scheduled backups keep the last one while no chat has changed."
+                            else "No chat archive made yet. Back up now makes the first one.",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp),
+                        )
+                    }
                 }
             },
             confirmButton = { TextButton(onClick = { dialog = null }) { Text("Done") } },

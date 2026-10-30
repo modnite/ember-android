@@ -224,6 +224,14 @@ class BackupSettings(context: Context) {
         get() = prefs.getString("archiveStamp", "") ?: ""
         set(v) { prefs.edit().putString("archiveStamp", v).apply() }
 
+    /** When the newest chat archive was made and how big it is, so a backup that keeps it (nothing changed) can still say what the set holds. */
+    var archiveAt: Long
+        get() = prefs.getLong("archiveAt", 0L)
+        set(v) { prefs.edit().putLong("archiveAt", v).apply() }
+    var archiveBytes: Long
+        get() = prefs.getLong("archiveBytes", 0L)
+        set(v) { prefs.edit().putLong("archiveBytes", v).apply() }
+
     var keep: Int
         get() = prefs.getInt("keep", 5).coerceIn(1, 30)
         set(v) { prefs.edit().putInt("keep", v.coerceIn(1, 30)).apply(); changed() }
