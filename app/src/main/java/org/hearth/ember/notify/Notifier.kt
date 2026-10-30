@@ -80,7 +80,7 @@ class Notifier(private val context: Context) {
         system.deleteNotificationChannel("service")
         system.createNotificationChannel(
             NotificationChannel(CHANNEL_SERVICE, "Connection (hidden)", NotificationManager.IMPORTANCE_NONE).apply {
-                description = "Keeps Ember connected so messages arrive on time. It shows nothing; leave it off."
+                description = "Keeps Ember connected so messages arrive on time. Android shows it anyway, as quietly as it can; Settings, Notifications can turn it off for checks every 15 minutes."
                 setShowBadge(false)
             },
         )
@@ -195,9 +195,12 @@ class Notifier(private val context: Context) {
 
     /** The persistent notification the receiver service needs. Silent and minimal. */
     fun serviceNotification() = NotificationCompat.Builder(context, CHANNEL_SERVICE)
-        .setSmallIcon(R.drawable.ic_stat_ember)
+        .setSmallIcon(R.drawable.ic_stat_quiet)
         .setContentTitle("Ember")
-        .setContentText("Connected")
+        .setContentText("Waiting for messages")
+        .setCategory(NotificationCompat.CATEGORY_SERVICE)
+        .setVisibility(NotificationCompat.VISIBILITY_SECRET)
+        .setShowWhen(false)
         .setOngoing(true)
         .setSilent(true)
         .setPriority(NotificationCompat.PRIORITY_MIN)

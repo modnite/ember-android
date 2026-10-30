@@ -30,11 +30,12 @@ class ReceiverService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val app = ember
-        if (!app.store.signedIn || !app.prefs.notificationsOn.value) {
+        // Android wants startForeground within seconds of every start, even one that is about to end again (signed out, alerts off).
+        ServiceCompat.startForeground(this, 2, app.notifier.serviceNotification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        if (!app.store.signedIn || !app.prefs.notificationsOn.value || !app.prefs.instantDelivery.value) {
             stopSelf()
             return START_NOT_STICKY
         }
-        ServiceCompat.startForeground(this, 2, app.notifier.serviceNotification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
         if (job?.isActive != true) job = scope.launch { poll() }
         return START_STICKY
     }
@@ -75,16 +76,31 @@ class ReceiverService : Service() {
         stopSelf()
     }
 
-    private suspend fun register() {
-        val app = ember
+    private suspend fun register() = NotifyPump.register(ember)
+
+    private fun handle(event: org.hearth.ember.data.NativeEvent) = NotifyPump.handle(ember, event)
+
+    companion object {
+        fun start(context: Context) {
+            ContextCompat.startForegroundService(context, Intent(context, ReceiverService::class.java))
+        }
+
+        fun stop(context: Context) {
+            context.stopService(Intent(context, ReceiverService::class.java))
+        }
+    }
+}
+
+/** What happens to a notification event once the server has handed it over: shared by the always-on receiver and the 15 minute check. */
+object NotifyPump {
+    suspend fun register(app: org.hearth.ember.EmberApp) {
         val device = app.api.registerNotificationDevice(app.store.notifyDeviceId, "Ember for Android")
         app.store.notifyDeviceId = device.deviceId
         app.store.notifyToken = device.token
         app.store.notifyCursor = device.cursor
     }
 
-    private fun handle(event: org.hearth.ember.data.NativeEvent) {
-        val app = ember
+    fun handle(app: org.hearth.ember.EmberApp, event: org.hearth.ember.data.NativeEvent) {
         val payload = event.payload
         if (event.kind == "cancel") {
             payload.roomId?.let { app.notifier.cancelRoom(it) }
@@ -105,14 +121,52 @@ class ReceiverService : Service() {
         }
         app.notifier.message(payload, app.prefs.previews.value)
     }
+}
 
-    companion object {
-        fun start(context: Context) {
-            ContextCompat.startForegroundService(context, Intent(context, ReceiverService::class.java))
+/** The battery-friendly way: one look at the server's queue every 15 minutes, with nothing running (and nothing shown) in between. */
+class NotifyWorker(context: Context, params: androidx.work.WorkerParameters) : androidx.work.CoroutineWorker(context, params) {
+    override suspend fun doWork(): Result {
+        val app = applicationContext.ember
+        if (!app.store.signedIn || !app.prefs.notificationsOn.value) return Result.success()
+        return try {
+            if (app.store.notifyToken.isEmpty()) NotifyPump.register(app)
+            val token = app.store.notifyToken
+            val batch = app.api.notificationEvents(token, app.store.notifyCursor)
+            for (event in batch.events) NotifyPump.handle(app, event)
+            if (batch.cursor > app.store.notifyCursor) {
+                app.api.ackNotifications(token, batch.cursor)
+                app.store.notifyCursor = batch.cursor
+            }
+            Result.success()
+        } catch (e: ApiException) {
+            if (e.status == 401) app.store.notifyToken = ""
+            Result.retry()
+        } catch (e: Exception) {
+            Result.retry()
         }
+    }
+}
 
-        fun stop(context: Context) {
-            context.stopService(Intent(context, ReceiverService::class.java))
+/** Makes what runs match the settings: nothing when alerts are off, the always-on receiver for instant delivery, the 15 minute check otherwise. */
+object Delivery {
+    private const val NAME = "ember-notify-check"
+
+    fun apply(context: Context) {
+        val app = context.ember
+        val work = androidx.work.WorkManager.getInstance(context)
+        if (!app.store.signedIn || !app.prefs.notificationsOn.value) {
+            work.cancelUniqueWork(NAME)
+            ReceiverService.stop(context)
+            return
+        }
+        if (app.prefs.instantDelivery.value) {
+            work.cancelUniqueWork(NAME)
+            runCatching { ReceiverService.start(context) }
+        } else {
+            ReceiverService.stop(context)
+            val request = androidx.work.PeriodicWorkRequestBuilder<NotifyWorker>(15, java.util.concurrent.TimeUnit.MINUTES)
+                .setConstraints(androidx.work.Constraints.Builder().setRequiredNetworkType(androidx.work.NetworkType.CONNECTED).build()).build()
+            work.enqueueUniquePeriodicWork(NAME, androidx.work.ExistingPeriodicWorkPolicy.UPDATE, request)
         }
     }
 }

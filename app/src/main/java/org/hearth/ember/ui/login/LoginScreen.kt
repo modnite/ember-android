@@ -108,7 +108,7 @@ fun LoginScreen() {
                     Modifier.size(84.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Filled.LocalFireDepartment, null, tint = Color.White, modifier = Modifier.size(48.dp))
+                    Icon(androidx.compose.ui.res.painterResource(org.hearth.ember.R.drawable.ic_stat_ember), null, tint = Color.White, modifier = Modifier.size(48.dp))
                 }
                 Spacer(Modifier.height(20.dp))
             }
@@ -178,5 +178,5 @@ fun LoginScreen() {
             Spacer(Modifier.height(24.dp))
         }
     }
-    if (restoring) org.hearth.ember.ui.settings.RestoreOnSignIn { restoring = false }
+    if (restoring) org.hearth.ember.ui.settings.RestoreOnSignIn(server, username, password) { restoring = false }
 }

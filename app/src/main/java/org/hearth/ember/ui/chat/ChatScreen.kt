@@ -353,7 +353,7 @@ fun ChatScreen(nav: NavHostController, roomId: String, embedded: Boolean = false
         }
     }
 
-    Column(Modifier.fillMaxSize().offset(x = shake.value.dp).background(EmberTheme.colors.chatBackground).imePadding(), horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(Modifier.fillMaxSize().offset(x = shake.value.dp).chatWallpaper().imePadding(), horizontalAlignment = Alignment.CenterHorizontally) {
         if (pickedMessages.isNotEmpty()) SelectionBar(
             messages = pickedMessages, meId = meId,
             onClose = { picked = emptyList() },

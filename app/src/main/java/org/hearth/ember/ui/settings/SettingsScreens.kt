@@ -71,6 +71,7 @@ import androidx.navigation.NavHostController
 import kotlinx.coroutines.launch
 import org.hearth.ember.BuildConfig
 import org.hearth.ember.ember
+import org.hearth.ember.notify.Delivery
 import org.hearth.ember.notify.ReceiverService
 import org.hearth.ember.ui.ThemeMode
 import org.hearth.ember.ui.components.UserAvatar
@@ -109,13 +110,11 @@ fun SettingsTab(nav: NavHostController) {
             }
             HorizontalDivider(Modifier.padding(vertical = 4.dp))
 
-            ActionRow(Icons.Filled.Notifications, "Notifications", "Alerts, message text, battery") { nav.navigate("settings/notifications") }
-            ActionRow(Icons.Filled.Notifications, "Sounds", "Message sound, ringtone, test") { nav.navigate("settings/sounds") }
-            ActionRow(Icons.Filled.DarkMode, "Appearance", "Theme and colours") { nav.navigate("settings/appearance") }
-            ActionRow(Icons.Filled.Keyboard, "Chats", "Enter key, chat sounds") { nav.navigate("settings/chats") }
-            ActionRow(Icons.Filled.Lock, "Encryption", "The key that opens encrypted chats") { nav.navigate("settings/encryption") }
+            ActionRow(Icons.Filled.Notifications, "Notifications and sounds", "Alerts, message sound, ringtone") { nav.navigate("settings/notifications") }
+            ActionRow(Icons.Filled.DarkMode, "Appearance", "Theme, colours, chat wallpaper") { nav.navigate("settings/appearance") }
+            ActionRow(Icons.Filled.Keyboard, "Chats and calls", "Enter key, photos, nudges, echo") { nav.navigate("settings/chats") }
             ActionRow(Icons.Filled.Search, "GIFs and stickers", "Search Giphy, Imgur and more") { nav.navigate("settings/online") }
-            ActionRow(Icons.Filled.Backup, "Backup and restore", "Back up and restore your key and settings") { nav.navigate("settings/backup") }
+            ActionRow(Icons.Filled.Backup, "Backup and encryption", "Automatic backups, restore, your key") { nav.navigate("settings/backup") }
             UpdateRow()
 
             HorizontalDivider(Modifier.padding(vertical = 4.dp))
@@ -150,12 +149,10 @@ fun SettingsTab(nav: NavHostController) {
 @Composable
 fun SettingsPage(nav: NavHostController, page: String) {
     val title = when (page) {
-        "notifications" -> "Notifications"
-        "sounds" -> "Sounds"
+        "notifications", "sounds" -> "Notifications and sounds"
         "appearance" -> "Appearance"
-        "chats" -> "Chats"
-        "encryption" -> "Encryption"
-        "backup" -> "Backup and restore"
+        "chats" -> "Chats and calls"
+        "backup", "encryption" -> "Backup and encryption"
         "online" -> "GIFs and stickers"
         else -> "Settings"
     }
@@ -167,12 +164,10 @@ fun SettingsPage(nav: NavHostController, page: String) {
         )
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
             when (page) {
-                "notifications" -> NotificationsPage()
-                "sounds" -> SoundsPage()
+                "notifications", "sounds" -> { NotificationsPage(); SoundsPage() }
                 "appearance" -> AppearancePage()
                 "chats" -> ChatsPage()
-                "encryption" -> EncryptionPage()
-                "backup" -> BackupRows()
+                "backup", "encryption" -> BackupRows()
                 "online" -> OnlineRows()
             }
             Spacer(Modifier.height(32.dp))
@@ -188,11 +183,16 @@ private fun NotificationsPage() {
     val previews by app.prefs.previews.collectAsState()
             ToggleRow(Icons.Filled.Notifications, "Message and call alerts", "Stay connected in the background so they arrive on time", notifications) { on ->
                 app.prefs.setNotifications(on)
-                if (on) ReceiverService.start(app) else ReceiverService.stop(app)
+                Delivery.apply(app)
             }
-            ToggleRow(Icons.Filled.Visibility, "Show message text", "Turn off to show only “New message” on the lock screen", previews) { app.prefs.setPreviews(it) }
-    ActionRow(Icons.Filled.Notifications, "Send a test notification", "See and hear how a message alert looks and sounds") { app.notifier.test() }
-            ActionRow(Icons.Filled.BatteryChargingFull, "Battery", "Let Ember run without being put to sleep") {
+            val instant by app.prefs.instantDelivery.collectAsState()
+            if (notifications) ToggleRow(
+                Icons.Filled.Notifications, "Instant delivery",
+                if (instant) "Stays connected; Android shows one small silent notification" else "Checks every 15 minutes, no notification; calls will not ring",
+                instant,
+            ) { app.prefs.setInstantDelivery(it); Delivery.apply(app) }
+            if (notifications) ToggleRow(Icons.Filled.Visibility, "Show message text", "Off shows only “New message” on the lock screen", previews) { app.prefs.setPreviews(it) }
+            if (notifications) ActionRow(Icons.Filled.BatteryChargingFull, "Battery", "Let Ember run without being put to sleep") {
                 val pm = context.getSystemService(PowerManager::class.java)
                 val intent = if (pm.isIgnoringBatteryOptimizations(context.packageName)) Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
                 else Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${context.packageName}"))
@@ -232,24 +232,10 @@ private fun SoundsPage() {
             ActionRow(Icons.Filled.Notifications, "Ringtone", soundName(callSound, android.media.RingtoneManager.TYPE_RINGTONE)) {
                 pickCall.launch(picker(android.media.RingtoneManager.TYPE_RINGTONE, "Call ringtone", callSound))
             }
-            ActionRow(Icons.Filled.Notifications, "Use Ember's own sounds", "Go back to the default chime and ringtone") {
+            if (messageSound != null || callSound != null) ActionRow(Icons.Filled.Notifications, "Use Ember's own sounds", "Go back to the default chime and ringtone") {
                 app.prefs.setMessageSound(null); app.prefs.setCallSound(null); app.notifier.createChannels()
             }
-            val softwareEcho by app.prefs.softwareEcho.collectAsState()
-            ToggleRow(
-                Icons.Filled.Hearing, "Ember's own echo cancelling in calls",
-                "Turn on if the other person hears themselves back (speakerphone on some phones). Off uses the phone's own. From the next call.",
-                softwareEcho,
-            ) { app.prefs.setSoftwareEcho(it) }
-            ActionRow(Icons.Filled.Notifications, "Send a test notification", "Shows a message alert with your chosen sound") { app.notifier.test() }
-            ActionRow(Icons.Filled.Notifications, "Play the ringtone", "Plays it for a few seconds") {
-                val uri = when (callSound) { null -> Uri.parse("android.resource://" + context.packageName + "/" + org.hearth.ember.R.raw.ember_ring); "silent" -> null; else -> Uri.parse(callSound) }
-                if (uri != null) runCatching {
-                    val ring = android.media.RingtoneManager.getRingtone(context, uri)
-                    ring.play()
-                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ runCatching { ring.stop() } }, 4000)
-                }
-            }
+            ActionRow(Icons.Filled.Notifications, "Try a message alert", "Shows one with your chosen sound") { app.notifier.test() }
 }
 
 @Composable
@@ -261,6 +247,16 @@ private fun AppearancePage() {
     var themeDialog by remember { mutableStateOf(false) }
             ActionRow(Icons.Filled.DarkMode, "Theme", when (theme) { ThemeMode.System -> "Same as the phone"; ThemeMode.Light -> "Light"; ThemeMode.Dark -> "Dark"; ThemeMode.Black -> "Black (saves power on OLED)" }) { themeDialog = true }
     AccentRow()
+    var wallpaperDialog by remember { mutableStateOf(false) }
+    val wallpaperChoice by app.prefs.wallpaper.collectAsState()
+    val pickWallpaper = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null && org.hearth.ember.ui.chat.Wallpapers.savePhoto(context, uri)) { app.prefs.photoChanged(); app.prefs.setWallpaper(org.hearth.ember.ui.chat.Wallpapers.PHOTO) }
+    }
+    ActionRow(Icons.Filled.Palette, "Chat wallpaper", org.hearth.ember.ui.chat.Wallpapers.label(wallpaperChoice)) { wallpaperDialog = true }
+    if (wallpaperDialog) org.hearth.ember.ui.chat.WallpaperDialog(
+        onPickPhoto = { pickWallpaper.launch(androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+        onDismiss = { wallpaperDialog = false },
+    )
             if (Build.VERSION.SDK_INT >= 31) {
                 ToggleRow(Icons.Filled.Palette, "Use phone colours", "Match your wallpaper instead of Ember orange", dynamic) { app.prefs.setDynamicColor(it) }
             }
@@ -293,13 +289,19 @@ private fun ChatsPage() {
             ToggleRow(Icons.Filled.Keyboard, "Enter sends", "Use the Enter key to send instead of adding a new line", enterSends) { app.prefs.setEnterSends(it) }
     ToggleRow(Icons.Filled.Notifications, "Chat sounds", "Small sounds in a chat for messages arriving, sending and typing", soundsOn) { on -> app.prefs.setSoundsOn(on) }
     val sendHd by app.prefs.sendHd.collectAsState()
-    ToggleRow(Icons.Filled.PhotoLibrary, "Send photos and videos in HD", "Sharper and larger. Off sends a smaller copy that arrives faster; the preview before sending lets you choose for one send.", sendHd) { on -> app.prefs.setSendHd(on) }
+    ToggleRow(Icons.Filled.PhotoLibrary, "Send photos and videos in HD", "Sharper and larger. Off sends a smaller copy that arrives faster.", sendHd) { on -> app.prefs.setSendHd(on) }
     val nudgeButton by app.prefs.nudgeButton.collectAsState()
-    ToggleRow(Icons.Filled.WavingHand, "Nudge button", "A nudge button in the top bar of every chat. Off puts Nudge in the paperclip menu instead.", nudgeButton) { on -> app.prefs.setNudgeButton(on) }
+    ToggleRow(Icons.Filled.WavingHand, "Nudge button", "In the top bar of every chat. Off puts Nudge in the paperclip menu.", nudgeButton) { on -> app.prefs.setNudgeButton(on) }
+    val softwareEcho by app.prefs.softwareEcho.collectAsState()
+            ToggleRow(
+                Icons.Filled.Hearing, "Ember's own echo cancelling in calls",
+                "On if the other person hears themselves back. From the next call.",
+                softwareEcho,
+            ) { app.prefs.setSoftwareEcho(it) }
 }
 
 @Composable
-private fun EncryptionPage() {
+internal fun EncryptionRows() {
     val context = LocalContext.current
     val app = context.ember
             val e2ee by app.e2ee.status.collectAsState()

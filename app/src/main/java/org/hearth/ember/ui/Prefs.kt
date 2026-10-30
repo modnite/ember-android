@@ -1,5 +1,7 @@
 package org.hearth.ember.ui
 
+import org.hearth.ember.ui.chat.Wallpapers
+
 import android.content.Context
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -124,6 +126,25 @@ class Prefs(context: Context) {
         p.edit().putBoolean("notify", on).apply()
         _notify.value = on
     }
+
+    /**
+     * Instant (the default): a connection kept open in the background, which Android makes show one small silent notification. Off: Ember
+     * looks for new messages every 15 minutes and shows nothing while it waits (calls do not ring while the app is closed).
+     */
+    private val _instant = MutableStateFlow(p.getBoolean("instantDelivery", true))
+    val instantDelivery: StateFlow<Boolean> = _instant.asStateFlow()
+    fun setInstantDelivery(on: Boolean) { p.edit().putBoolean("instantDelivery", on).apply(); _instant.value = on }
+
+    /** The picture behind chats (see Wallpapers): a preset's name or "photo", how much a photo is darkened, and a counter that changes when the photo does. */
+    private val _wallpaper = MutableStateFlow(p.getString("wallpaper", Wallpapers.DOODLE) ?: Wallpapers.DOODLE)
+    val wallpaper: StateFlow<String> = _wallpaper.asStateFlow()
+    fun setWallpaper(v: String) { p.edit().putString("wallpaper", v).apply(); _wallpaper.value = v }
+    private val _wallpaperDim = MutableStateFlow(p.getInt("wallpaperDim", 25))
+    val wallpaperDim: StateFlow<Int> = _wallpaperDim.asStateFlow()
+    fun setWallpaperDim(v: Int) { p.edit().putInt("wallpaperDim", v.coerceIn(0, 70)).apply(); _wallpaperDim.value = v.coerceIn(0, 70) }
+    private val _wallpaperVersion = MutableStateFlow(0)
+    val wallpaperVersion: StateFlow<Int> = _wallpaperVersion.asStateFlow()
+    fun photoChanged() { _wallpaperVersion.value++ }
 
     private val _preview = MutableStateFlow(p.getBoolean("preview", true))
 

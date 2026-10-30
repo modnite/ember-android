@@ -96,6 +96,9 @@ class Api(private val store: SessionStore, val client: OkHttpClient) {
     // ------------------------------------------------------------------ account
     suspend fun me(): User = get<UserResponse>("/api/auth/me").user
 
+    /** The key that seals this account's backups (the server makes it the first time it is asked for). */
+    suspend fun backupKey(): BackupKeyResponse = get("/api/backup/key")
+
     suspend fun login(username: String, password: String): User =
         post<UserResponse>("/api/auth/login", buildJsonObject { put("username", username); put("password", password) }).user
 

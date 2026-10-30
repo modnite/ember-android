@@ -15,8 +15,8 @@ android {
         applicationId = "org.hearth.ember"
         minSdk = 26
         targetSdk = 35
-        versionCode = 19
-        versionName = "0.3.14"
+        versionCode = 20
+        versionName = "0.4.0"
         // Where Ember looks for newer versions of itself.
         buildConfigField("String", "UPDATE_REPO", "\"modnite/ember-android\"")
     }

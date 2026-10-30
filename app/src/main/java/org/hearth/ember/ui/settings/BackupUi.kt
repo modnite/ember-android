@@ -1,5 +1,7 @@
 package org.hearth.ember.ui.settings
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
@@ -22,8 +24,8 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Password
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Schedule as ScheduleIcon
 import androidx.compose.material.icons.filled.Wifi
@@ -69,9 +71,11 @@ import org.hearth.ember.ui.fileSize
 /** The windows the backup page can have open. */
 private sealed interface Dlg {
     data object AddDav : Dlg
-    data object SetPassphrase : Dlg
-    data object PickSchedule : Dlg
+    data object Timing : Dlg
+    data object AddPlace : Dlg
+    data object Included : Dlg
     data object RestoreSource : Dlg
+    class Key(val text: String, val id: String) : Dlg
     class RestoreList(val dest: Destination, val entries: List<RemoteEntry>) : Dlg
     class AskPassphrase(val then: (String) -> Unit) : Dlg
 }
@@ -93,10 +97,12 @@ private fun ago(ms: Long): String {
     }
 }
 
+private fun clock(minute: Int) = "%02d:%02d".format(minute / 60, minute % 60)
+
 /**
  * Backup and restore. A backup holds your encryption key, your settings and your stickers (and, if you ask, a readable copy of your chats and
- * their files). It goes to as many places as you like (folders Android can reach, WebDAV or Nextcloud), by hand or on a schedule, encrypted with
- * a passphrase or left plain, as you choose.
+ * their files). Turning on automatic backups is one switch and one folder; every backup is sealed with a key that belongs to your account, so
+ * there is no password to choose or to forget, and nobody else can open it. Restoring needs only that you are signed in.
  */
 @Composable
 fun BackupRows() {
@@ -108,26 +114,40 @@ fun BackupRows() {
     var dialog by remember { mutableStateOf<Dlg?>(null) }
     var progress by remember { mutableStateOf<String?>(null) }
     var pass by remember { mutableStateOf("") }
-    var pass2 by remember { mutableStateOf("") }
     var url by remember { mutableStateOf("") }
     var user by remember { mutableStateOf("") }
     var davPass by remember { mutableStateOf("") }
     var label by remember { mutableStateOf("") }
-    var pendingFile by remember { mutableStateOf<ByteArray?>(null) }
+    var turningOn by remember { mutableStateOf(false) }
     val busy = progress != null
 
     fun say(text: String) = Toast.makeText(context, text, Toast.LENGTH_LONG).show()
     fun problem(e: Throwable) = say(e.message ?: "Something went wrong.")
     fun reschedule() = BackupScheduler.apply(context, settings)
 
+    fun backUpNow() {
+        scope.launch {
+            progress = "Starting…"
+            runCatching { app.backup.runNow { progress = it } }.onSuccess { results ->
+                val failed = results.filter { !it.second.ok }
+                say(if (failed.isEmpty()) "Backed up to ${results.size} ${if (results.size == 1) "place" else "places"}." else failed.joinToString("\n") { "${it.first.label}: ${it.second.message}" })
+            }.onFailure { problem(it) }
+            progress = null
+        }
+    }
+
     val addFolder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri: Uri? ->
+        val wasTurningOn = turningOn
+        turningOn = false
         if (uri == null) return@rememberLauncherForActivityResult
         runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION) }
         val name = DocumentFile.fromTreeUri(context, uri)?.name ?: "Folder"
         settings.destinations = settings.destinations.filter { it.uri != uri.toString() } + Destination(UUID.randomUUID().toString().take(8), Destination.KIND_FOLDER, name, uri.toString())
+        // The one switch: a folder, a daily backup at the usual hour, and a first backup right away so it is known to work.
+        if (wasTurningOn) { settings.schedule = Schedule.Daily; reschedule(); backUpNow() }
     }
 
-    /** Restore from a file's bytes; an encrypted one asks for its passphrase. */
+    /** Restore from a file's bytes; an old passphrase-sealed one asks for its passphrase. */
     fun restoreBytes(bytes: ByteArray, passphrase: String?) {
         scope.launch {
             progress = "Restoring…"
@@ -150,19 +170,21 @@ fun BackupRows() {
         if (uri != null) scope.launch { runCatching { withContext(Dispatchers.IO) { app.backup.readUri(uri) } }.onSuccess { restoreBytes(it, settings.passphrase.ifEmpty { null }) }.onFailure { problem(it) } }
     }
 
-    fun backUpNow() {
-        scope.launch {
-            progress = "Starting…"
-            runCatching { app.backup.runNow { progress = it } }.onSuccess { results ->
-                val failed = results.filter { !it.second.ok }
-                say(if (failed.isEmpty()) "Backed up to ${results.size} ${if (results.size == 1) "place" else "places"}." else failed.joinToString("\n") { "${it.first.label}: ${it.second.message}" })
-            }.onFailure { problem(it) }
-            progress = null
+    Section("Automatic")
+    val auto = settings.schedule != Schedule.Off
+    ToggleRow(
+        Icons.Filled.Backup, "Back up automatically",
+        if (!auto) "A folder and one switch. No password." else lastSummary(settings.destinations.size, settings.lastRuns.values.maxOfOrNull { it.at }, revision),
+        auto,
+    ) { on ->
+        when {
+            !on -> { settings.schedule = Schedule.Off; reschedule() }
+            settings.destinations.isEmpty() -> { turningOn = true; addFolder.launch(null) }
+            else -> { settings.schedule = Schedule.Daily; reschedule() }
         }
     }
-
-    Section("Back up")
-    ActionRow(Icons.Filled.Backup, "Back up now", lastSummary(settings.destinations.size, settings.lastRuns.values.maxOfOrNull { it.at }, revision)) {
+    if (auto) ActionRow(Icons.Filled.ScheduleIcon, "Schedule", "${settings.schedule.label} at ${clock(settings.atMinute)}" + if (settings.wifiOnly) ", Wi-Fi only" else "") { dialog = Dlg.Timing }
+    ActionRow(Icons.Filled.Backup, "Back up now", if (settings.destinations.isEmpty()) "Add a place first" else lastSummary(settings.destinations.size, settings.lastRuns.values.maxOfOrNull { it.at }, revision)) {
         if (settings.destinations.isEmpty()) say("Add a place to keep backups first.") else if (!busy) backUpNow()
     }
     progress?.let {
@@ -170,50 +192,33 @@ fun BackupRows() {
         LinearProgressIndicator(Modifier.fillMaxWidth().padding(start = 56.dp, end = 20.dp, top = 6.dp, bottom = 6.dp))
     }
 
-    Section("Where backups are kept")
+    Section("Places and contents")
     for (d in settings.destinations) {
         val run = settings.lastRuns[d.id]
-        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(if (d.isFolder) Icons.Filled.Folder else Icons.Filled.Cloud, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.width(20.dp))
             Column(Modifier.weight(1f)) {
-                Text(d.label, style = MaterialTheme.typography.bodyLarge)
+                Text(d.label, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
                 Text(
-                    when { run == null -> "Nothing backed up here yet"; run.ok -> "Last backup ${ago(run.at)}, ${fileSize(run.bytes)}"; else -> "Failed ${ago(run.at)}: ${run.message}" },
-                    style = MaterialTheme.typography.bodySmall, color = if (run != null && !run.ok) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                    when { run == null -> "Nothing backed up here yet"; run.ok -> "${ago(run.at)}, ${fileSize(run.bytes)}"; else -> "Failed ${ago(run.at)}: ${run.message}" },
+                    style = MaterialTheme.typography.bodySmall, maxLines = 1, color = if (run != null && !run.ok) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             IconButton(onClick = { settings.destinations = settings.destinations.filter { it.id != d.id }; settings.lastRuns = settings.lastRuns - d.id }) { Icon(Icons.Filled.Delete, "Remove ${d.label}") }
         }
     }
-    ActionRow(Icons.Filled.CreateNewFolder, "Add a folder", "On this phone, an SD card or USB drive, or a network share through its app") { addFolder.launch(null) }
-    ActionRow(Icons.Filled.Cloud, "Add WebDAV or Nextcloud", "Your own server") { url = ""; user = ""; davPass = ""; label = ""; dialog = Dlg.AddDav }
+    ActionRow(Icons.Filled.CreateNewFolder, "Add a place", "A folder on this phone or a drive, WebDAV or Nextcloud") { dialog = Dlg.AddPlace }
+    ActionRow(
+        Icons.Filled.History, "Included",
+        "Key, settings, stickers" + (if (settings.includeHistory) ", chats" else "") + (if (settings.includeHistory && settings.includeMedia) " and files" else "") + ". Keeps ${settings.keep}.",
+    ) { dialog = Dlg.Included }
 
-    Section("What is included")
-    ActionRow(Icons.Filled.Lock, "Encryption key, settings and stickers", "Always included. The key opens your encrypted chats on a new phone.") { }
-    ToggleRow(Icons.Filled.History, "Chat history", "A readable copy of your conversations. The messages stay on your server too.", settings.includeHistory) { settings.includeHistory = it }
-    ToggleRow(Icons.Filled.Image, "Pictures, videos and files", if (settings.includeHistory) "Everything sent in your chats (files over 64 MB are left out)." else "Turn on chat history first.", settings.includeMedia && settings.includeHistory) {
-        if (settings.includeHistory) settings.includeMedia = it
+    Section("Keys and restore")
+    ActionRow(Icons.Filled.Key, "Backup key", "Seals every backup. Show it to read one on a computer.") {
+        scope.launch { runCatching { app.backup.key() }.onSuccess { dialog = Dlg.Key(it.text, it.id) }.onFailure { problem(it) } }
     }
-
-    Section("Protection")
-    ToggleRow(Icons.Filled.Lock, "Encrypt backups", if (settings.encrypt) "Sealed with your passphrase. Without it a backup cannot be opened." else "Plain: anyone who gets the file can read it, and it contains your encryption key.", settings.encrypt) { settings.encrypt = it }
-    if (settings.encrypt) ActionRow(Icons.Filled.Password, "Passphrase", if (settings.passphrase.isEmpty()) "Not set. Backups need one." else "Set. Tap to change it.") { pass = ""; pass2 = ""; dialog = Dlg.SetPassphrase }
-
-    Section("Automatic backups")
-    ActionRow(Icons.Filled.ScheduleIcon, "How often", if (settings.schedule == Schedule.Off) "Off. Backups only happen when you ask." else settings.schedule.label) { dialog = Dlg.PickSchedule }
-    ToggleRow(Icons.Filled.Wifi, "Only on Wi-Fi", "Scheduled backups wait for an unmetered network.", settings.wifiOnly) { settings.wifiOnly = it; reschedule() }
-    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Spacer(Modifier.width(44.dp))
-        Column(Modifier.weight(1f)) {
-            Text("Keep the last ${settings.keep} backups", style = MaterialTheme.typography.bodyLarge)
-            Text("Older ones are deleted from each place.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        TextButton(onClick = { settings.keep = settings.keep - 1 }, enabled = settings.keep > 1) { Text("−") }
-        TextButton(onClick = { settings.keep = settings.keep + 1 }, enabled = settings.keep < 30) { Text("+") }
-    }
-
-    Section("Restore")
+    EncryptionRows()
     ActionRow(Icons.Filled.Restore, "Restore", "From a place you back up to, or from a file") { dialog = Dlg.RestoreSource }
 
     when (val d = dialog) {
@@ -241,34 +246,82 @@ fun BackupRows() {
             },
             dismissButton = { TextButton(onClick = { dialog = null }) { Text("Cancel") } },
         )
-        Dlg.SetPassphrase -> {
-            val mismatch = pass.isEmpty() || pass != pass2
-            AlertDialog(
-                onDismissRequest = { dialog = null },
-                title = { Text("Backup passphrase") },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(pass, { pass = it }, singleLine = true, label = { Text("Passphrase") }, visualTransformation = PasswordVisualTransformation())
-                        OutlinedTextField(pass2, { pass2 = it }, singleLine = true, label = { Text("Passphrase again") }, visualTransformation = PasswordVisualTransformation())
-                        Text("Keep it somewhere safe. It is stored on this phone so scheduled backups can run, but a lost phone takes it with it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                },
-                confirmButton = { TextButton(enabled = !mismatch, onClick = { settings.passphrase = pass; pass = ""; pass2 = ""; dialog = null }) { Text("Save") } },
-                dismissButton = { TextButton(onClick = { dialog = null }) { Text("Cancel") } },
-            )
-        }
-        Dlg.PickSchedule -> AlertDialog(
+        is Dlg.Key -> AlertDialog(
             onDismissRequest = { dialog = null },
-            title = { Text("Back up automatically") },
+            title = { Text("Your backup key") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(d.text, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace))
+                    Text("Key ${d.id}. Anyone who has this key and one of your backup files can read it, so keep it to yourself. The Ember backup reader on a computer asks for it, or for your sign-in.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    context.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Ember backup key", d.text))
+                    say("Copied."); dialog = null
+                }) { Text("Copy") }
+            },
+            dismissButton = { TextButton(onClick = { dialog = null }) { Text("Close") } },
+        )
+        Dlg.Timing -> AlertDialog(
+            onDismissRequest = { dialog = null },
+            title = { Text("Automatic backup") },
             text = {
                 Column {
-                    for (s in Schedule.entries) Row(Modifier.fillMaxWidth().clickable { settings.schedule = s; reschedule(); dialog = null }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(selected = settings.schedule == s, onClick = { settings.schedule = s; reschedule(); dialog = null })
+                    for (s in Schedule.entries.filter { it != Schedule.Off }) Row(Modifier.fillMaxWidth().clickable { settings.schedule = s; reschedule() }.padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = settings.schedule == s, onClick = { settings.schedule = s; reschedule() })
                         Text(s.label)
+                    }
+                    Row(Modifier.fillMaxWidth().clickable {
+                        android.app.TimePickerDialog(context, { _, h, m -> settings.atMinute = h * 60 + m; reschedule() }, settings.atMinute / 60, settings.atMinute % 60, true).show()
+                    }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("At")
+                            Text("Android may run it a little later when the phone is asleep.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Text(clock(settings.atMinute), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                    }
+                    Row(Modifier.fillMaxWidth().clickable { settings.wifiOnly = !settings.wifiOnly; reschedule() }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Only on Wi-Fi", Modifier.weight(1f))
+                        androidx.compose.material3.Switch(settings.wifiOnly, { settings.wifiOnly = it; reschedule() })
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { dialog = null }) { Text("Close") } },
+            confirmButton = { TextButton(onClick = { dialog = null }) { Text("Done") } },
+        )
+        Dlg.AddPlace -> AlertDialog(
+            onDismissRequest = { dialog = null },
+            title = { Text("Add a place") },
+            text = {
+                Column {
+                    Choice("A folder", "On this phone, an SD card or USB drive, or a network share through its app") { dialog = null; turningOn = false; addFolder.launch(null) }
+                    Choice("WebDAV or Nextcloud", "Your own server") { url = ""; user = ""; davPass = ""; label = ""; dialog = Dlg.AddDav }
+                }
+            },
+            confirmButton = { TextButton(onClick = { dialog = null }) { Text("Cancel") } },
+        )
+        Dlg.Included -> AlertDialog(
+            onDismissRequest = { dialog = null },
+            title = { Text("What a backup includes") },
+            text = {
+                Column {
+                    Text("Always: your encryption key, settings and stickers.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(Modifier.fillMaxWidth().clickable { settings.includeHistory = !settings.includeHistory }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) { Text("Chat history"); Text("A readable copy of your conversations", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        androidx.compose.material3.Switch(settings.includeHistory, { settings.includeHistory = it })
+                    }
+                    Row(Modifier.fillMaxWidth().clickable { if (settings.includeHistory) settings.includeMedia = !settings.includeMedia }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) { Text("Pictures, videos and files"); Text("Files over 64 MB are left out", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        androidx.compose.material3.Switch(settings.includeMedia && settings.includeHistory, { settings.includeMedia = it }, enabled = settings.includeHistory)
+                    }
+                    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Keep the last ${settings.keep}", Modifier.weight(1f))
+                        TextButton(onClick = { settings.keep = settings.keep - 1 }, enabled = settings.keep > 1) { Text("−") }
+                        TextButton(onClick = { settings.keep = settings.keep + 1 }, enabled = settings.keep < 30) { Text("+") }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { dialog = null }) { Text("Done") } },
         )
         Dlg.RestoreSource -> AlertDialog(
             onDismissRequest = { dialog = null },
@@ -300,14 +353,13 @@ fun BackupRows() {
         )
         is Dlg.AskPassphrase -> AlertDialog(
             onDismissRequest = { dialog = null; pass = "" },
-            title = { Text("This backup is encrypted") },
+            title = { Text("An older backup, sealed with a passphrase") },
             text = { OutlinedTextField(pass, { pass = it }, singleLine = true, label = { Text("Passphrase") }, visualTransformation = PasswordVisualTransformation()) },
             confirmButton = { TextButton(enabled = pass.isNotEmpty(), onClick = { val p = pass; pass = ""; dialog = null; d.then(p) }) { Text("Restore") } },
             dismissButton = { TextButton(onClick = { dialog = null; pass = "" }) { Text("Cancel") } },
         )
         null -> {}
     }
-    @Suppress("UNUSED_VARIABLE") val keepAlive = pendingFile
 }
 
 private fun lastSummary(places: Int, last: Long?, @Suppress("UNUSED_PARAMETER") revision: Int): String = when {
@@ -330,28 +382,32 @@ private fun Choice(title: String, subtitle: String, onClick: () -> Unit) {
 }
 
 /**
- * Restoring on a new phone, before signing in: a backup file, or the newest backup on a WebDAV or Nextcloud server, puts the encryption key and
- * the settings back, so the encrypted chats open as soon as you sign in.
+ * Restoring on a new phone, from the sign-in screen: the server, username and password already typed there sign you in, and then a backup
+ * file, or the newest backup on a WebDAV or Nextcloud server, puts the encryption key and the settings back, so the encrypted chats open at once.
+ * It runs in the app's own scope, so it carries on when the sign-in screen goes away.
  */
 @Composable
-fun RestoreOnSignIn(onClose: () -> Unit) {
+fun RestoreOnSignIn(server: String, username: String, password: String, onClose: () -> Unit) {
     val context = LocalContext.current
     val app = context.ember
-    val scope = rememberCoroutineScope()
-    var step by remember { mutableStateOf(0) } // 0 where from, 1 the server's details, 2 a passphrase
+    var step by remember { mutableStateOf(0) } // 0 where from, 1 the server's details, 2 a passphrase (an older backup)
     var url by remember { mutableStateOf("") }
     var user by remember { mutableStateOf("") }
     var davPass by remember { mutableStateOf("") }
     var passphrase by remember { mutableStateOf("") }
     var continueWith by remember { mutableStateOf<((String) -> Unit)?>(null) }
     var busy by remember { mutableStateOf(false) }
+    val ready = server.isNotBlank() && username.isNotBlank() && password.isNotEmpty()
 
-    fun say(text: String) = Toast.makeText(context, text, Toast.LENGTH_LONG).show()
+    fun say(text: String) = Toast.makeText(context.applicationContext, text, Toast.LENGTH_LONG).show()
 
     fun run(block: suspend () -> String, again: (String) -> Unit) {
-        scope.launch {
+        app.scope.launch {
             busy = true
-            runCatching { block() }.onSuccess { say(it); onClose() }.onFailure { e ->
+            runCatching {
+                if (!app.store.signedIn) app.repo.signIn(server, username, password)
+                block()
+            }.onSuccess { say(it); onClose() }.onFailure { e ->
                 if (e is BackupException && e.needsPassphrase) { continueWith = again; step = 2 } else say(e.message ?: "Something went wrong.")
             }
             busy = false
@@ -365,9 +421,9 @@ fun RestoreOnSignIn(onClose: () -> Unit) {
         }) { fromServer(d, it) }
     }
     val openFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
-        if (uri != null) scope.launch { runCatching { withContext(Dispatchers.IO) { app.backup.readUri(uri) } }.onSuccess { fromBytes(it, null) }.onFailure { say(it.message ?: "Could not read that file.") } }
+        if (uri != null) app.scope.launch { runCatching { withContext(Dispatchers.IO) { app.backup.readUri(uri) } }.onSuccess { fromBytes(it, null) }.onFailure { say(it.message ?: "Could not read that file.") } }
     }
-    val server by remember(url, user, davPass) { mutableStateOf(Destination("restore", Destination.KIND_DAV, "server", url.trim(), user.trim(), davPass)) }
+    val dav by remember(url, user, davPass) { mutableStateOf(Destination("restore", Destination.KIND_DAV, "server", url.trim(), user.trim(), davPass)) }
 
     when (step) {
         0 -> AlertDialog(
@@ -375,10 +431,16 @@ fun RestoreOnSignIn(onClose: () -> Unit) {
             title = { Text("Restore from a backup") },
             text = {
                 Column {
-                    Text("This puts your encryption key and settings back, so your encrypted chats open once you sign in.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        if (ready) "This signs you in with the details you typed, then puts your encryption key and settings back, so your encrypted chats open."
+                        else "Type your server, username and password on the sign-in screen first. Restoring signs you in with them, and the backup needs nothing else.",
+                        style = MaterialTheme.typography.bodySmall, color = if (ready) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
+                    )
                     Spacer(Modifier.height(8.dp))
-                    Choice("A file", "Open a backup you saved") { openFile.launch(arrayOf("*/*")) }
-                    Choice("WebDAV or Nextcloud", "The newest backup on your server") { step = 1 }
+                    if (ready) {
+                        Choice("A file", "Open a backup you saved") { openFile.launch(arrayOf("*/*")) }
+                        Choice("WebDAV or Nextcloud", "The newest backup on your server") { step = 1 }
+                    }
                 }
             },
             confirmButton = { TextButton(onClick = onClose) { Text("Cancel") } },
@@ -394,12 +456,12 @@ fun RestoreOnSignIn(onClose: () -> Unit) {
                     if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                 }
             },
-            confirmButton = { TextButton(enabled = url.isNotBlank() && !busy, onClick = { fromServer(server, null) }) { Text("Restore") } },
+            confirmButton = { TextButton(enabled = url.isNotBlank() && !busy, onClick = { fromServer(dav, null) }) { Text("Restore") } },
             dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } },
         )
         else -> AlertDialog(
             onDismissRequest = onClose,
-            title = { Text("This backup is encrypted") },
+            title = { Text("An older backup, sealed with a passphrase") },
             text = { OutlinedTextField(passphrase, { passphrase = it }, singleLine = true, label = { Text("Passphrase") }, visualTransformation = PasswordVisualTransformation()) },
             confirmButton = { TextButton(enabled = passphrase.isNotEmpty(), onClick = { val p = passphrase; passphrase = ""; continueWith?.invoke(p) }) { Text("Restore") } },
             dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } },

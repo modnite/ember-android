@@ -52,6 +52,6 @@ class NotificationActionReceiver : BroadcastReceiver() {
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val app = context.ember
-        if (app.store.signedIn && app.prefs.notificationsOn.value) runCatching { ReceiverService.start(context) }
+        runCatching { Delivery.apply(context) }
     }
 }

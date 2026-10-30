@@ -8,3 +8,5 @@ build/
 sound-samples/
 .idea/
 *.iml
+tools/backup-reader/build/
+tools/backup-reader/.gradle/

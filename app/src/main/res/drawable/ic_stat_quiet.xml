@@ -1,0 +1,5 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <!-- Nothing to see: the small icon of the connection notification Android insists on, so the status bar has nothing to show for it. -->
+    <path android:fillColor="#00FFFFFF" android:pathData="M0,0 H1 V1 H0 Z" />
+</vector>

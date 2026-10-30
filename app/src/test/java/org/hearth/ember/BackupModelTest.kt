@@ -97,4 +97,23 @@ class BackupModelTest {
         dav.delete("gone.zip")
         server.shutdown()
     }
+
+    @Test fun keyedArchiveSealsFilesAndNeedsTheKeyToOpen() {
+        val key = ByteArray(32) { (it + 5).toByte() }
+        val sealed = ArchiveCipher.keyed(key, "aabbccdd")
+        assertTrue(sealed.encrypted)
+        val blob = sealed.seal("hello".toByteArray())
+        assertFalse(String(blob).contains("hello"))
+        assertEquals("hello", String(ArchiveCipher.from(sealed.header(), null, key).open(blob)))
+        try { ArchiveCipher.from(sealed.header(), null); fail() } catch (e: BackupException) { assertTrue(e.needsKey) }
+    }
+
+    @Test fun nextBackupTimeIsTheChosenClockTimeTodayOrTomorrow() {
+        val zone = java.util.TimeZone.getTimeZone("UTC")
+        val noon = java.util.Calendar.getInstance(zone).apply { clear(); set(2026, 9, 29, 12, 0, 0) }.timeInMillis
+        val hour = 60 * 60 * 1000L
+        assertEquals(15 * hour, org.hearth.ember.data.BackupScheduler.delayUntil(3 * 60, noon, zone)) // 03:00 has passed: tomorrow
+        assertEquals(2 * hour, org.hearth.ember.data.BackupScheduler.delayUntil(14 * 60, noon, zone))
+        assertEquals(24 * hour, org.hearth.ember.data.BackupScheduler.delayUntil(12 * 60, noon, zone)) // exactly now: tomorrow
+    }
 }

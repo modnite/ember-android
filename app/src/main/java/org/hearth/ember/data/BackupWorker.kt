@@ -38,6 +38,16 @@ object BackupScheduler {
             .setRequiredNetworkType(if (settings.wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED)
             .setRequiresBatteryNotLow(true)
             .build()
-        work.enqueueUniquePeriodicWork(NAME, ExistingPeriodicWorkPolicy.UPDATE, PeriodicWorkRequestBuilder<BackupWorker>(schedule.hours, TimeUnit.HOURS).setConstraints(constraints).build())
+        // The first run is due at the chosen time of day (today or tomorrow), then every day, week or month after it. Android may run it a little later.
+        val request = PeriodicWorkRequestBuilder<BackupWorker>(schedule.hours, TimeUnit.HOURS)
+            .setConstraints(constraints).setInitialDelay(delayUntil(settings.atMinute, System.currentTimeMillis()), TimeUnit.MILLISECONDS).build()
+        work.enqueueUniquePeriodicWork(NAME, ExistingPeriodicWorkPolicy.UPDATE, request)
+    }
+
+    /** Milliseconds from [nowMs] to the next time the clock reads [atMinute] minutes after midnight. */
+    fun delayUntil(atMinute: Int, nowMs: Long, zone: java.util.TimeZone = java.util.TimeZone.getDefault()): Long {
+        val c = java.util.Calendar.getInstance(zone).apply { timeInMillis = nowMs; set(java.util.Calendar.HOUR_OF_DAY, atMinute / 60); set(java.util.Calendar.MINUTE, atMinute % 60); set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0) }
+        if (c.timeInMillis <= nowMs) c.add(java.util.Calendar.DAY_OF_MONTH, 1)
+        return c.timeInMillis - nowMs
     }
 }

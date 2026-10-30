@@ -25,7 +25,7 @@ import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
-/** How often a backup runs by itself. */
+/** How often a backup runs by itself (at the time of day set in [BackupSettings.atMinute]). */
 enum class Schedule(val label: String, val hours: Long) {
     Off("Off", 0), Daily("Daily", 24), Weekly("Weekly", 24 * 7), Monthly("Monthly", 24 * 30),
 }
@@ -40,6 +40,15 @@ data class Destination(val id: String, val kind: String, val label: String, val 
         const val KIND_DAV = "dav"
     }
 }
+
+/** The key that seals an account's backups: 32 bytes and a short fingerprint saying which key it is. */
+class BackupKey(val bytes: ByteArray, val id: String) {
+    /** The key as text, to keep somewhere safe or to give the desktop reader. */
+    val text: String get() = java.util.Base64.getEncoder().withoutPadding().encodeToString(bytes)
+}
+
+@Serializable
+class BackupKeyResponse(val key: String, val id: String)
 
 /** What the last backup to a destination did. */
 @Serializable
@@ -69,7 +78,7 @@ object BackupNames {
  * Seals the files inside a history archive one by one (AES-256-GCM, a fresh nonce each), under one key made from the passphrase, so a large
  * archive never has to sit in memory whole. Without a passphrase the files are kept as they are.
  */
-class ArchiveCipher private constructor(private val key: SecretKeySpec?, private val salt: ByteArray?) {
+class ArchiveCipher private constructor(private val key: SecretKeySpec?, private val salt: ByteArray?, private val keyId: String? = null) {
     val encrypted get() = key != null
 
     /** What goes in the archive's plain header, so the passphrase can be checked later. */
@@ -77,6 +86,7 @@ class ArchiveCipher private constructor(private val key: SecretKeySpec?, private
         put("ember_archive", 1)
         put("encrypted", encrypted)
         if (salt != null) { put("rounds", BackupFormat.ROUNDS); put("salt", java.util.Base64.getEncoder().encodeToString(salt)) }
+        if (keyId != null) { put("keyed", true); put("keyId", keyId) }
     }
 
     fun seal(data: ByteArray): ByteArray {
@@ -96,13 +106,20 @@ class ArchiveCipher private constructor(private val key: SecretKeySpec?, private
     companion object {
         fun plain() = ArchiveCipher(null, null)
 
+        /** Sealed under the account's own key (see [BackupFormat]): no passphrase. */
+        fun keyed(key: ByteArray, keyId: String) = ArchiveCipher(SecretKeySpec(key, "AES"), null, keyId)
+
         fun create(passphrase: String): ArchiveCipher {
             val salt = ByteArray(16).also(SecureRandom()::nextBytes)
             return ArchiveCipher(BackupFormat.deriveKey(passphrase, salt, BackupFormat.ROUNDS), salt)
         }
 
-        fun from(header: JsonObject, passphrase: String?): ArchiveCipher {
+        fun from(header: JsonObject, passphrase: String?, key: ByteArray? = null): ArchiveCipher {
             if (header["encrypted"]?.jsonPrimitive?.boolean != true) return plain()
+            if (header["keyed"]?.jsonPrimitive?.boolean == true) {
+                if (key == null) throw BackupException("This archive is sealed with your account's key. Sign in first.", needsKey = true)
+                return ArchiveCipher(SecretKeySpec(key, "AES"), null, header["keyId"]?.jsonPrimitive?.content)
+            }
             if (passphrase.isNullOrEmpty()) throw BackupException("This archive is encrypted.", needsPassphrase = true)
             val salt = java.util.Base64.getDecoder().decode(header["salt"]!!.jsonPrimitive.content)
             val rounds = header["rounds"]?.jsonPrimitive?.int ?: BackupFormat.ROUNDS
@@ -134,11 +151,24 @@ class BackupSettings(context: Context) {
         get() = Schedule.entries.firstOrNull { it.name == prefs.getString("schedule", null) } ?: Schedule.Off
         set(v) { prefs.edit().putString("schedule", v.name).apply(); changed() }
 
-    /** Encrypted by default: a backup holds the key that opens encrypted chats. */
-    var encrypt: Boolean
-        get() = prefs.getBoolean("encrypt", true)
-        set(v) { prefs.edit().putBoolean("encrypt", v).apply(); changed() }
+    /** The time of day an automatic backup is due, in minutes after midnight (the default is 03:00). Android may run it a little later. */
+    var atMinute: Int
+        get() = prefs.getInt("atMinute", 3 * 60).coerceIn(0, 24 * 60 - 1)
+        set(v) { prefs.edit().putInt("atMinute", v.coerceIn(0, 24 * 60 - 1)).apply(); changed() }
 
+    /** The account's backup key, as last fetched from the server, with who it belongs to ("server|user"), so a backup can run without the server. */
+    fun cachedKey(owner: String): BackupKey? {
+        if (prefs.getString("keyOwner", null) != owner) return null
+        val b64 = prefs.getString("keyB64", null) ?: return null
+        val id = prefs.getString("keyId", null) ?: return null
+        return runCatching { BackupKey(java.util.Base64.getDecoder().decode(b64), id) }.getOrNull()
+    }
+
+    fun cacheKey(owner: String, key: BackupKey) {
+        prefs.edit().putString("keyOwner", owner).putString("keyB64", java.util.Base64.getEncoder().encodeToString(key.bytes)).putString("keyId", key.id).apply()
+    }
+
+    /** Only for opening older backups that were sealed with a passphrase; new ones are sealed with the account's key. */
     var passphrase: String
         get() = prefs.getString("passphrase", "") ?: ""
         set(v) { prefs.edit().putString("passphrase", v).apply(); changed() }
@@ -170,11 +200,5 @@ class BackupSettings(context: Context) {
 
     fun record(destination: String, run: BackupRun) { lastRuns = lastRuns + (destination to run) }
 
-    /** The passphrase to seal with, or null for plain; a [BackupException] when encryption is on but no passphrase was set. */
-    fun sealingPassphrase(): String? {
-        if (!encrypt) return null
-        if (passphrase.isEmpty()) throw BackupException("Encryption is on but no passphrase is set. Set one, or turn encryption off.")
-        return passphrase
-    }
 
 }

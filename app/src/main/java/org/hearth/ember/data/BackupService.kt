@@ -20,7 +20,7 @@ import org.hearth.ember.EmberApp
 /**
  * Backing up what lives only on this phone: the encryption key that opens the encrypted chats (without it a lost phone means those chats
  * cannot be read again), the settings and your stickers and GIFs. Optionally also a readable copy of your chats and their files (the messages
- * themselves live on the Hearth server). It goes to every destination you set up, by hand or on a schedule, encrypted with a passphrase or plain.
+ * themselves live on the Hearth server). It goes to every destination you set up, by hand or on a schedule, always sealed with a key that belongs to your account (see [BackupFormat]).
  */
 class BackupService(private val app: EmberApp, private val context: Context) {
     val settings by lazy { BackupSettings(context) }
@@ -48,11 +48,27 @@ class BackupService(private val app: EmberApp, private val context: Context) {
         }
     }
 
-    fun make(passphrase: String?): ByteArray = BackupFormat.seal(content(), passphrase)
+    fun make(key: BackupKey): ByteArray = BackupFormat.sealKeyed(content(), key.bytes, key.id)
+
+    /**
+     * The key that seals this account's backups. The server gives it to the signed-in owner and it is remembered here, so a scheduled backup
+     * still runs when the server cannot be reached; with neither, there is no backup.
+     */
+    suspend fun key(): BackupKey {
+        val owner = app.store.server + "|" + app.store.userId
+        val fetched = runCatching { app.api.backupKey() }.getOrNull()
+        if (fetched != null) {
+            val key = BackupKey(java.util.Base64.getDecoder().decode(fetched.key), fetched.id)
+            settings.cacheKey(owner, key)
+            return key
+        }
+        return settings.cachedKey(owner) ?: throw BackupException("Could not get your backup key from the server. Check the connection and try again.")
+    }
 
     /** Put a backup back on this phone: the key first, then the settings and the stickers. Returns a short description of what was restored. */
     suspend fun apply(file: ByteArray, passphrase: String?): String {
-        val data = EmberJson.parseToJsonElement(BackupFormat.open(file, passphrase)).jsonObject
+        val key = if (app.store.signedIn) runCatching { key() }.getOrNull() else null
+        val data = EmberJson.parseToJsonElement(BackupFormat.open(file, passphrase, key?.bytes, key?.id)).jsonObject
         val secret = data["e2eeSecret"]?.jsonPrimitive?.content.orEmpty()
         if (secret.isNotEmpty()) app.store.e2eeSecret = secret
         (data["settings"] as? JsonObject)?.let { app.prefs.restore(it) }
@@ -83,14 +99,14 @@ class BackupService(private val app: EmberApp, private val context: Context) {
     suspend fun runNow(progress: (String) -> Unit = {}): List<Pair<Destination, BackupRun>> = withContext(Dispatchers.IO) {
         val destinations = settings.destinations
         if (destinations.isEmpty()) throw BackupException("Add a place to back up to first.")
-        val passphrase = settings.sealingPassphrase()
+        val key = key()
         val now = System.currentTimeMillis()
         val dir = workDir()
         try {
             progress("Preparing…")
-            val core = File(dir, BackupNames.core(now)).also { it.writeBytes(make(passphrase)) }
+            val core = File(dir, BackupNames.core(now)).also { it.writeBytes(make(key)) }
             val archive = if (settings.includeHistory) File(dir, BackupNames.archive(now)).also {
-                HistoryArchive(app).build(it, if (passphrase != null) ArchiveCipher.create(passphrase) else ArchiveCipher.plain(), settings.includeMedia, progress)
+                HistoryArchive(app).build(it, ArchiveCipher.keyed(key.bytes, key.id), settings.includeMedia, progress)
             } else null
             destinations.map { d ->
                 val run = runCatching {

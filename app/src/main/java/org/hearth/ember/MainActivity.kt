@@ -37,6 +37,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import org.hearth.ember.notify.CallNotifier
+import org.hearth.ember.notify.Delivery
 import org.hearth.ember.notify.Notifier
 import org.hearth.ember.notify.ReceiverService
 import org.hearth.ember.ui.ThemeMode
@@ -180,11 +181,11 @@ private fun EmberRoot(pendingRoom: androidx.compose.runtime.MutableState<String?
 
     // Notifications: ask once, and start the quiet background receiver.
     val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) ReceiverService.start(app)
+        if (granted) Delivery.apply(app)
     }
     LaunchedEffect(Unit) {
         if (!app.prefs.notificationsOn.value) return@LaunchedEffect
-        if (Build.VERSION.SDK_INT >= 33) askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS) else ReceiverService.start(app)
+        if (Build.VERSION.SDK_INT >= 33) askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS) else Delivery.apply(app)
     }
 
     DisposableEffect(lifecycle) {
