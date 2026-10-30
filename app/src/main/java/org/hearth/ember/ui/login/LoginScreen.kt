@@ -1,5 +1,6 @@
 package org.hearth.ember.ui.login
 
+import org.hearth.ember.ui.settings.revealWhenFocused
 import androidx.compose.runtime.collectAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -56,7 +57,7 @@ import kotlinx.coroutines.launch
 import org.hearth.ember.data.ApiException
 import org.hearth.ember.ember
 
-/** Sign in to a Hearth server, or join one with an invite. The server address is remembered, so after the first time it is just the name and password. */
+/** Sign in to a Hearth server, or make an account on one. The server address is remembered, so after the first time it is just the name and password. */
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun LoginScreen() {
@@ -76,22 +77,15 @@ fun LoginScreen() {
     // Two-step sign-in: set when the server says this account needs the code from its authenticator app.
     var code by remember { mutableStateOf("") }
     var needsCode by remember { mutableStateOf(false) }
-    // The server lets anyone join without an invite code.
-    var openJoin by remember { mutableStateOf(false) }
-    androidx.compose.runtime.LaunchedEffect(server) {
-        openJoin = false
-        // Once the address looks finished (a pause in typing, with a dot or localhost in it), ask the server how joining works.
-        if (server.contains('.') || server.startsWith("localhost") || server.startsWith("http://")) {
-            runCatching { kotlinx.coroutines.delay(800); app.store.server = server; app.api.authConfig() }.onSuccess { openJoin = it.registration == "open" }
-        }
-    }
+    // Creating an account needs no code on most servers. A server that wants an invite code (or its house key) says so when the form is sent,
+    // and only then does the field appear.
+    var needsInvite by remember { mutableStateOf(false) }
 
     fun submit() {
         if (busy) return
         error = null
         if (server.isBlank()) { error = "Enter your server address."; return }
         if (username.isBlank() || password.isEmpty()) { error = "Enter your username and password."; return }
-        if (joining && invite.isBlank() && !openJoin) { error = "Enter the invite code you were given."; return }
         busy = true
         scope.launch {
             try {
@@ -101,7 +95,9 @@ fun LoginScreen() {
                 app.scope.launch(kotlinx.coroutines.Dispatchers.Default) { runCatching { app.backup.adoptPassword(password, false) } }
             } catch (e: ApiException) {
                 if (e.message?.contains("two-step", ignoreCase = true) == true) needsCode = true
-                error = e.message
+                // The server wants a code: ask for it now.
+                if (joining && e.message?.contains("invite code", ignoreCase = true) == true) { needsInvite = true; error = "This server needs an invite code. Enter the one you were given." }
+                else error = e.message
             } catch (e: Exception) {
                 error = "Something went wrong. Try again."
             } finally {
@@ -132,7 +128,7 @@ fun LoginScreen() {
             if (!compact) {
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    if (joining) "Join your friends' server with the invite code they sent you." else "Private messaging on your own server.",
+                    if (joining) "Make an account on your friends' server." else "Private messaging on your own server.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
@@ -144,25 +140,27 @@ fun LoginScreen() {
                 value = server, onValueChange = { server = it }, label = { Text("Server") }, singleLine = true,
                 placeholder = { Text("chat.example.com") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next),
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().revealWhenFocused(),
             )
             Spacer(Modifier.height(12.dp))
             if (joining) {
-                OutlinedTextField(
-                    value = invite, onValueChange = { invite = it }, label = { Text(if (openJoin) "Invite code (optional)" else "Invite code") }, singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next), modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(Modifier.height(12.dp))
+                if (needsInvite) {
+                    OutlinedTextField(
+                        value = invite, onValueChange = { invite = it }, label = { Text("Invite code") }, singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next), modifier = Modifier.fillMaxWidth().revealWhenFocused(),
+                    )
+                    Spacer(Modifier.height(12.dp))
+                }
                 OutlinedTextField(
                     value = displayName, onValueChange = { displayName = it }, label = { Text("Your name") }, singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next), modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next), modifier = Modifier.fillMaxWidth().revealWhenFocused(),
                 )
                 Spacer(Modifier.height(12.dp))
             }
             OutlinedTextField(
                 value = username, onValueChange = { username = it }, label = { Text("Username") }, singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, imeAction = ImeAction.Next),
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().revealWhenFocused(),
             )
             Spacer(Modifier.height(12.dp))
             OutlinedTextField(
@@ -175,7 +173,7 @@ fun LoginScreen() {
                         Icon(if (show) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, if (show) "Hide password" else "Show password")
                     }
                 },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().revealWhenFocused(),
             )
             if (needsCode && !joining) {
                 Spacer(Modifier.height(12.dp))
@@ -184,7 +182,7 @@ fun LoginScreen() {
                     supportingText = { Text("From your authenticator app, or a recovery code") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
                     keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { submit() }),
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().revealWhenFocused(),
                 )
             }
             if (error != null) {
@@ -198,7 +196,7 @@ fun LoginScreen() {
             }
             Spacer(Modifier.height(8.dp))
             TextButton(onClick = { joining = !joining; error = null }) {
-                Text(if (joining) "I already have an account" else if (openJoin) "Create an account" else "I have an invite code")
+                Text(if (joining) "I already have an account" else "Create an account")
             }
             TextButton(onClick = { restoring = true }) { Text("Restore from a backup") }
             Spacer(Modifier.height(24.dp))

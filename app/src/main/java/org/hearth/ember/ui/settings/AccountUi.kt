@@ -51,7 +51,7 @@ internal fun passwordProblem(next: String, again: String): String? = when {
 /** A field that scrolls itself into view when it gets focus, once the keyboard has come up, so it is never left behind it. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun Modifier.revealWhenFocused(): Modifier {
+internal fun Modifier.revealWhenFocused(): Modifier {
     val requester = remember { BringIntoViewRequester() }
     val scope = rememberCoroutineScope()
     return this.bringIntoViewRequester(requester).onFocusEvent { if (it.isFocused) scope.launch { delay(300); requester.bringIntoView() } }
