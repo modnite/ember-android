@@ -2,6 +2,10 @@
 
 One entry per release. All dates are 2026.
 
+## 1.2.0 (31 Oct)
+- Spacing matches the web app: section headings, settings rows, people rows and the archived row use the same sizes in both.
+- This release rolls up the interface round: the new wallpaper model, regrouped settings and the sideways fixes from 1.1.7. From here the last number is for small fixes and the middle number for features, improvements and major fixes.
+
 ## 1.1.7 (31 Oct)
 - Wallpapers work like the big messengers: a flat colour that follows the theme and accent, a switch for doodles, and a dimming slider. "Accent colour" washes the flat colour. A photo can still be used. Earlier choices carry over.
 - The doodles are now 84 large icons and 28 small shapes, placed off any grid, with no icon near a copy of itself. The same picture as the web app.

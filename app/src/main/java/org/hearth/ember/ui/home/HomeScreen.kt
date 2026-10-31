@@ -336,7 +336,7 @@ private fun ChatsTab(nav: NavHostController, connected: Boolean) {
                 if (archivedRooms.isNotEmpty()) {
                     item("archived-row") {
                         Row(
-                            Modifier.fillMaxWidth().clickable { showArchived = !showArchived }.padding(horizontal = 20.dp, vertical = 14.dp),
+                            Modifier.fillMaxWidth().clickable { showArchived = !showArchived }.padding(horizontal = 16.dp, vertical = 14.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Icon(Icons.Outlined.Archive, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -393,7 +393,7 @@ private fun ChatsTab(nav: NavHostController, connected: Boolean) {
 
 @Composable
 private fun SectionLabel(text: String) {
-    Text(text, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+    Text(text, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 4.dp))
 }
 
 @Composable

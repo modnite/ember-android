@@ -182,7 +182,7 @@ fun SectionLabel(text: String) {
 
 @Composable
 fun PersonRow(user: User, subtitle: String, modifier: Modifier = Modifier, trailing: @Composable (() -> Unit)? = null) {
-    Row(modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         UserAvatar(user, 46.dp, showStatus = true)
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
