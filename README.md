@@ -1,6 +1,6 @@
 # Ember
 
-Native Android messenger for a [Hearth server](https://github.com/modnite/hearth-server). Kotlin, Jetpack Compose, Material 3. Package `org.hearth.ember`, minSdk 26, targetSdk 35. Current version: 1.0.0.
+Native Android messenger for a [Hearth server](https://github.com/modnite/hearth-server). Kotlin, Jetpack Compose, Material 3. Package `org.hearth.ember`, minSdk 26, targetSdk 35. Current version: 1.1.2.
 
 <p>
 <img src="docs/screenshots/chats.png" alt="Chats" width="24%">
