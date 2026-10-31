@@ -1,5 +1,10 @@
 package org.hearth.ember.ui.settings
 
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -306,7 +311,7 @@ private fun ChatsPage() {
     val spellCheck by app.prefs.spellCheck.collectAsState()
     val spellAvailable = remember { val c = org.hearth.ember.ui.chat.SpellChecker(app); val ok = c.available(); c.close(); ok }
     ToggleRow(Icons.Filled.Keyboard, "Check spelling", if (spellAvailable) "Underline misspelt words in the message box" else "Switch on a spell checker in Android Settings, General management, Keyboard list and defaults, Spell checker", spellCheck) { on -> app.prefs.setSpellCheck(on) }
-    var spellReport by remember { mutableStateOf<String?>(null) }
+    var spellReport by remember { mutableStateOf<SpellReport?>(null) }
     val spellScope = rememberCoroutineScope()
     ActionRow(Icons.Filled.Keyboard, "Test spell checking", "Shows what your spell checker says") {
         spellScope.launch {
@@ -315,20 +320,16 @@ private fun ChatsPage() {
             val found = if (checker.available()) checker.check(sample) else null
             checker.close()
             val id = android.provider.Settings.Secure.getString(app.contentResolver, "selected_spell_checker").orEmpty()
-            val label = runCatching {
-                val pkg = id.substringBefore('/')
-                app.packageManager.getApplicationLabel(app.packageManager.getApplicationInfo(pkg, 0)).toString() + " (" + pkg + ")"
-            }.getOrDefault(id.ifBlank { "none selected" })
-            spellReport = "Spell checker: $label\nSample: $sample\n" + when {
-                found == null -> "The phone gave no spell checker to use. Switch one on in Android Settings, General management, Keyboard list and defaults."
-                found.isEmpty() -> "Nothing was marked. The spell checker did not flag the sample for this language."
-                else -> found.joinToString("\n") { "Marked: " + sample.substring(it.start, it.end) + if (it.suggestions.isNotEmpty()) " (" + it.suggestions.joinToString(", ") + ")" else "" }
-            }
+            val pkg = id.substringBefore('/')
+            val label = runCatching { app.packageManager.getApplicationLabel(app.packageManager.getApplicationInfo(pkg, 0)).toString() }
+                .getOrDefault(pkg.ifBlank { "none selected" })
+            spellReport = SpellReport(
+                checker = label, sample = sample,
+                marks = found?.map { SpellMark(it.start, it.end, it.suggestions) },
+            )
         }
     }
-    spellReport?.let { text ->
-        AlertDialog(onDismissRequest = { spellReport = null }, title = { Text("Spell checking") }, text = { Text(text) }, confirmButton = { TextButton(onClick = { spellReport = null }) { Text("Close") } })
-    }
+    spellReport?.let { report -> SpellReportDialog(report) { spellReport = null } }
     val mirrorSelf by app.prefs.mirrorSelfPicture.collectAsState()
     ToggleRow(Icons.Filled.Cameraswitch, "Mirror my own picture", "You see yourself like in a mirror. Others see you as you are.", mirrorSelf) { on -> app.prefs.setMirrorSelfPicture(on) }
     val flipFront by app.prefs.flipFrontCamera.collectAsState()
@@ -459,4 +460,57 @@ fun ProfileScreen(nav: NavHostController) {
             ) { Text("Save") }
         }
     }
+}
+
+/** What the spell check test found: null [marks] means the phone gave no spell checker, an empty list means it flagged nothing. */
+private class SpellReport(val checker: String, val sample: String, val marks: List<SpellMark>?)
+
+private class SpellMark(val start: Int, val end: Int, val suggestions: List<String>)
+
+@Composable
+private fun SpellReportDialog(report: SpellReport, onClose: () -> Unit) {
+    val marks = report.marks
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("Spell check test") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    when {
+                        marks == null -> "No spell checker"
+                        marks.isEmpty() -> "Nothing was marked"
+                        else -> "Working: ${marks.size} ${if (marks.size == 1) "word" else "words"} marked"
+                    },
+                    style = MaterialTheme.typography.titleSmall,
+                    color = if (marks.isNullOrEmpty()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                )
+                val flagged = SpanStyle(color = MaterialTheme.colorScheme.error, textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline, fontWeight = FontWeight.SemiBold)
+                Text(
+                    buildAnnotatedString {
+                        append(report.sample)
+                        for (m in marks.orEmpty()) addStyle(flagged, m.start.coerceIn(0, report.sample.length), m.end.coerceIn(0, report.sample.length))
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(12.dp),
+                )
+                when {
+                    marks == null -> Text("Switch one on in Android Settings, General management, Keyboard list and defaults.", style = MaterialTheme.typography.bodyMedium)
+                    marks.isEmpty() -> Text("The checker did not flag the sample for this language.", style = MaterialTheme.typography.bodyMedium)
+                    else -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        for (m in marks) {
+                            Text(
+                                buildAnnotatedString {
+                                    withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append(report.sample.substring(m.start.coerceIn(0, report.sample.length), m.end.coerceIn(0, report.sample.length))) }
+                                    if (m.suggestions.isNotEmpty()) append("  \u2192  " + m.suggestions.take(4).joinToString(", "))
+                                },
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
+                    }
+                }
+                Text("Checker: ${report.checker}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        },
+        confirmButton = { TextButton(onClick = onClose) { Text("Close") } },
+    )
 }

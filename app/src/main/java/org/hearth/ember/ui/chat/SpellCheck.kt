@@ -10,6 +10,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -127,12 +129,16 @@ class SpellChecker(context: Context) {
     }
 }
 
-/** The wavy red line under each mistake, drawn under the text of the box (one piece for each line a word sits on). */
+/**
+ * The zigzag under each mistake, drawn under the text of the box (one piece for each line a word sits on). Every tooth is the same: a 90 degree
+ * point, as wide as it is tall, with the width of the word shared out evenly so the line starts and ends cleanly instead of with a part tooth.
+ */
 fun DrawScope.drawSpellErrors(layout: TextLayoutResult?, errors: List<SpellError>, color: Color) {
     if (layout == null || errors.isEmpty()) return
     val textLength = layout.layoutInput.text.length
-    val amplitude = 1.5.dp.toPx()
-    val step = 3.dp.toPx()
+    val amplitude = 1.25.dp.toPx()
+    val tooth = amplitude * 2f
+    val stroke = Stroke(width = 1.1.dp.toPx(), cap = StrokeCap.Butt, join = StrokeJoin.Miter, miter = 4f)
     for (e in errors) {
         if (e.end > textLength) continue
         var from = e.start
@@ -140,20 +146,18 @@ fun DrawScope.drawSpellErrors(layout: TextLayoutResult?, errors: List<SpellError
             val line = layout.getLineForOffset(from)
             val lineEnd = minOf(e.end, layout.getLineEnd(line, visibleEnd = true))
             val to: Int = if (lineEnd > from) lineEnd else e.end
-            val left = layout.getBoundingBox(from).left
-            val right = layout.getBoundingBox(maxOf(from, to - 1)).right
-            val y = layout.getLineBottom(line) - 1.dp.toPx()
+            val left = kotlin.math.round(layout.getBoundingBox(from).left)
+            val right = kotlin.math.round(layout.getBoundingBox(maxOf(from, to - 1)).right)
+            // At the foot of the line, below the letters and their descenders, on a whole pixel so the points stay sharp.
+            val y = kotlin.math.round(layout.getLineBottom(line) - amplitude - 0.5.dp.toPx())
+            // An even number of teeth, each as close to the standard width as the word allows.
+            val teeth = maxOf(2, 2 * kotlin.math.round((right - left) / (2f * tooth)).toInt())
+            val width = (right - left) / teeth
             val path = Path().apply {
-                moveTo(left, y)
-                var x = left
-                var up = true
-                while (x < right) {
-                    x = kotlin.math.min(x + step, right)
-                    lineTo(x, y + if (up) -amplitude else amplitude)
-                    up = !up
-                }
+                moveTo(left, y + amplitude)
+                for (i in 1..teeth) lineTo(left + width * i, y + if (i % 2 == 1) -amplitude else amplitude)
             }
-            drawPath(path, color, style = Stroke(width = 1.2.dp.toPx()))
+            drawPath(path, color, style = stroke)
             from = to
         }
     }

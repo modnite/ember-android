@@ -666,24 +666,57 @@ private fun Composer(
     val spellOn by context.ember.prefs.spellCheck.collectAsState()
     val checker = remember { SpellChecker(context) }
     androidx.compose.runtime.DisposableEffect(Unit) { onDispose { checker.close() } }
-    var errors by remember { mutableStateOf<List<SpellError>>(emptyList()) }
+    var found by remember { mutableStateOf<List<SpellError>>(emptyList()) }
+    // Words the person said are fine (for this chat box, until the app closes).
+    var ignored by remember { mutableStateOf<Set<String>>(emptySet()) }
     androidx.compose.runtime.LaunchedEffect(text, spellOn) {
-        if (!spellOn) { errors = emptyList(); return@LaunchedEffect }
+        if (!spellOn) { found = emptyList(); return@LaunchedEffect }
         kotlinx.coroutines.delay(350) // not on every key
-        errors = checker.check(text)
+        found = checker.check(text)
     }
+    fun wordOf(e: SpellError) = text.substring(e.start.coerceIn(0, text.length), e.end.coerceIn(0, text.length))
+    val errors = remember(found, ignored, text) { found.filter { it.end <= text.length && wordOf(it).lowercase() !in ignored } }
     val errorColor = MaterialTheme.colorScheme.error
     val here = if (spellOn && tfv.selection.collapsed) SpellChecker.at(errors, tfv.selection.start) else null
+    // The strip stays on one mistake until it is dealt with: the word the cursor is in, else the one last shown, else the last one written.
+    // It never vanishes the moment the cursor moves, so there is time to reach it.
+    var lastWord by remember { mutableStateOf<String?>(null) }
+    androidx.compose.runtime.LaunchedEffect(here?.start, here?.end, text) { here?.let { lastWord = wordOf(it) } }
+    val target = if (!spellOn) null else here ?: errors.firstOrNull { wordOf(it) == lastWord } ?: errors.lastOrNull()
     val compact = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp < 500
     val buttonHeight = if (compact) 44.dp else 56.dp
     val nudgeButton by LocalContext.current.ember.prefs.nudgeButton.collectAsState()
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     Column(Modifier.widthIn(max = 880.dp).fillMaxWidth()) {
-    if (here != null && here.suggestions.isNotEmpty()) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        for (suggestion in here.suggestions) androidx.compose.material3.SuggestionChip(
-            onClick = { val (t, cursor) = SpellChecker.apply(text, here, suggestion); tfv = androidx.compose.ui.text.input.TextFieldValue(t, androidx.compose.ui.text.TextRange(cursor)); onText(t) },
-            label = { Text(suggestion) },
-        )
+    if (target != null) {
+        val word = wordOf(target)
+        val position = errors.indexOf(target) + 1
+        Row(
+            Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainer).horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // The mistake itself. Tapping it goes to the next one, with how many there are.
+            androidx.compose.material3.AssistChip(
+                onClick = {
+                    val next = errors[position % errors.size]
+                    lastWord = wordOf(next)
+                    tfv = tfv.copy(selection = androidx.compose.ui.text.TextRange(next.end))
+                },
+                label = { Text(if (errors.size > 1) "$word  $position/${errors.size}" else word, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.SemiBold) },
+                modifier = Modifier.heightIn(min = 40.dp),
+            )
+            if (target.suggestions.isEmpty()) Text("No suggestions", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            for (suggestion in target.suggestions.take(5)) androidx.compose.material3.SuggestionChip(
+                onClick = {
+                    val (t, cursor) = SpellChecker.apply(text, target, suggestion)
+                    tfv = androidx.compose.ui.text.input.TextFieldValue(t, androidx.compose.ui.text.TextRange(cursor))
+                    onText(t)
+                },
+                label = { Text(suggestion, style = MaterialTheme.typography.bodyLarge) },
+                modifier = Modifier.heightIn(min = 40.dp),
+            )
+            androidx.compose.material3.TextButton(onClick = { ignored = ignored + word.lowercase() }) { Text("Ignore") }
+        }
     }
     Row(Modifier.fillMaxWidth().then(if (bottomInset) Modifier.navigationBarsPadding() else Modifier).padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.Bottom) {
         Surface(shape = RoundedCornerShape(26.dp), color = MaterialTheme.colorScheme.surface, shadowElevation = 1.dp, modifier = Modifier.weight(1f)) {
