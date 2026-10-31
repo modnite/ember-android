@@ -1,6 +1,6 @@
 # Ember
 
-Native Android messenger for a [Hearth server](https://github.com/modnite/hearth-server). Kotlin, Jetpack Compose, Material 3. Package `org.hearth.ember`, minSdk 26, targetSdk 35. Current version: 1.1.2.
+Native Android messenger for a [Hearth server](https://github.com/modnite/hearth-server). Kotlin, Jetpack Compose, Material 3. Package `org.hearth.ember`, minSdk 26, targetSdk 35. Current version: 1.1.3.
 
 <p>
 <img src="docs/screenshots/chats.png" alt="Chats" width="24%">
@@ -110,6 +110,7 @@ Signing, releasing and testing against a scratch server are in [docs/DEVELOPMENT
 | 1.1 | Low battery warnings in calls, crash reports to the server, spell check test | Done |
 | 1.1.1 | Front camera flip for Samsung phones, restore dialog fits in landscape | Done |
 | 1.1.2 | Bubble shape and spacing, bolder wallpaper with more shapes, clearer backup key window | Done |
+| 1.1.3 | Wallpaper shapes without overlaps | Done |
 
 ### Open items
 

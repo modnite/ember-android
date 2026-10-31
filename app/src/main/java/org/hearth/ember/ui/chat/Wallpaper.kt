@@ -154,18 +154,19 @@ private fun DrawScope.doodle(kind: Int, c: Offset, r: Float, ink: Color, stroke:
             }
             close()
         }, ink, style = stroke)
-        // A lightning bolt.
+        // A lightning bolt: one open stroke, so nothing crosses itself.
         8 -> drawPath(Path().apply {
-            moveTo(c.x + r * 0.3f, c.y - r * 1.2f); lineTo(c.x - r * 0.7f, c.y + r * 0.1f); lineTo(c.x - r * 0.05f, c.y + r * 0.1f)
-            lineTo(c.x - r * 0.3f, c.y + r * 1.2f); lineTo(c.x + r * 0.7f, c.y - r * 0.2f); lineTo(c.x + r * 0.05f, c.y - r * 0.2f); close()
+            moveTo(c.x + r * 0.35f, c.y - r * 1.2f); lineTo(c.x - r * 0.55f, c.y + r * 0.15f); lineTo(c.x + r * 0.15f, c.y + r * 0.15f); lineTo(c.x - r * 0.35f, c.y + r * 1.2f)
         }, ink, style = stroke)
-        // An asterisk.
-        9 -> for (deg in intArrayOf(0, 60, 120)) {
-            val a = Math.toRadians(deg.toDouble())
-            val dx = (r * 1.1f * Math.cos(a)).toFloat()
-            val dy = (r * 1.1f * Math.sin(a)).toFloat()
-            drawLine(ink, Offset(c.x - dx, c.y - dy), Offset(c.x + dx, c.y + dy), stroke.width, stroke.cap)
-        }
+        // A four pointed sparkle.
+        9 -> drawPath(Path().apply {
+            moveTo(c.x, c.y - r * 1.2f)
+            quadraticBezierTo(c.x + r * 0.15f, c.y - r * 0.15f, c.x + r * 1.2f, c.y)
+            quadraticBezierTo(c.x + r * 0.15f, c.y + r * 0.15f, c.x, c.y + r * 1.2f)
+            quadraticBezierTo(c.x - r * 0.15f, c.y + r * 0.15f, c.x - r * 1.2f, c.y)
+            quadraticBezierTo(c.x - r * 0.15f, c.y - r * 0.15f, c.x, c.y - r * 1.2f)
+            close()
+        }, ink, style = stroke)
         // A zigzag.
         10 -> drawPath(Path().apply {
             moveTo(c.x - r * 1.3f, c.y + r * 0.5f); lineTo(c.x - r * 0.65f, c.y - r * 0.5f); lineTo(c.x, c.y + r * 0.5f)
@@ -177,11 +178,13 @@ private fun DrawScope.doodle(kind: Int, c: Offset, r: Float, ink: Color, stroke:
             drawLine(ink, Offset(c.x + r * 0.15f, c.y + r * 0.8f), Offset(c.x + r * 0.15f, c.y - r * 1.1f), stroke.width, stroke.cap)
             drawPath(Path().apply { moveTo(c.x + r * 0.15f, c.y - r * 1.1f); quadraticBezierTo(c.x + r, c.y - r * 0.8f, c.x + r * 0.9f, c.y - r * 0.1f) }, ink, style = stroke)
         }
-        // A flower: four petals round a small centre.
-        12 -> {
-            for ((dx, dy) in listOf(0.55f to 0f, -0.55f to 0f, 0f to 0.55f, 0f to -0.55f)) drawCircle(ink, r * 0.5f, Offset(c.x + dx * r, c.y + dy * r), style = stroke)
-            drawCircle(ink, r * 0.2f, c, style = stroke)
-        }
+        // A drop.
+        12 -> drawPath(Path().apply {
+            moveTo(c.x, c.y - r * 1.2f)
+            cubicTo(c.x + r * 0.9f, c.y - r * 0.1f, c.x + r * 0.8f, c.y + r, c.x, c.y + r)
+            cubicTo(c.x - r * 0.8f, c.y + r, c.x - r * 0.9f, c.y - r * 0.1f, c.x, c.y - r * 1.2f)
+            close()
+        }, ink, style = stroke)
         // A crescent moon.
         13 -> drawPath(Path().apply {
             moveTo(c.x + r * 0.2f, c.y - r * 1.1f)
@@ -189,12 +192,17 @@ private fun DrawScope.doodle(kind: Int, c: Offset, r: Float, ink: Color, stroke:
             cubicTo(c.x - r * 0.7f, c.y + r * 0.7f, c.x - r * 0.7f, c.y - r * 0.7f, c.x + r * 0.2f, c.y - r * 1.1f)
             close()
         }, ink, style = stroke)
-        // A speech bubble.
-        14 -> {
-            drawRoundRect(ink, Offset(c.x - r * 1.1f, c.y - r * 0.8f), Size(r * 2.2f, r * 1.3f), androidx.compose.ui.geometry.CornerRadius(r * 0.4f), style = stroke)
-            drawPath(Path().apply { moveTo(c.x - r * 0.5f, c.y + r * 0.5f); lineTo(c.x - r * 0.7f, c.y + r * 1.1f); lineTo(c.x - r * 0.05f, c.y + r * 0.5f) }, ink, style = stroke)
-        }
-        // A leaf with its vein.
+        // A speech bubble, tail included, in one outline.
+        14 -> drawPath(Path().apply {
+            moveTo(c.x - r * 0.7f, c.y - r * 0.8f); lineTo(c.x + r * 0.7f, c.y - r * 0.8f)
+            quadraticBezierTo(c.x + r * 1.1f, c.y - r * 0.8f, c.x + r * 1.1f, c.y - r * 0.4f); lineTo(c.x + r * 1.1f, c.y + r * 0.1f)
+            quadraticBezierTo(c.x + r * 1.1f, c.y + r * 0.5f, c.x + r * 0.7f, c.y + r * 0.5f); lineTo(c.x - r * 0.05f, c.y + r * 0.5f)
+            lineTo(c.x - r * 0.7f, c.y + r * 1.1f); lineTo(c.x - r * 0.55f, c.y + r * 0.5f); lineTo(c.x - r * 0.7f, c.y + r * 0.5f)
+            quadraticBezierTo(c.x - r * 1.1f, c.y + r * 0.5f, c.x - r * 1.1f, c.y + r * 0.1f); lineTo(c.x - r * 1.1f, c.y - r * 0.4f)
+            quadraticBezierTo(c.x - r * 1.1f, c.y - r * 0.8f, c.x - r * 0.7f, c.y - r * 0.8f)
+            close()
+        }, ink, style = stroke)
+        // A leaf with its vein (the vein stays inside the outline).
         else -> {
             drawPath(Path().apply {
                 moveTo(c.x - r * 1.1f, c.y + r * 0.6f)
@@ -202,7 +210,7 @@ private fun DrawScope.doodle(kind: Int, c: Offset, r: Float, ink: Color, stroke:
                 quadraticBezierTo(c.x + r * 0.8f, c.y + r * 0.9f, c.x - r * 1.1f, c.y + r * 0.6f)
                 close()
             }, ink, style = stroke)
-            drawLine(ink, Offset(c.x - r, c.y + r * 0.6f), Offset(c.x + r * 0.5f, c.y - r * 0.4f), stroke.width, stroke.cap)
+            drawLine(ink, Offset(c.x - r * 0.7f, c.y + r * 0.4f), Offset(c.x + r * 0.45f, c.y - r * 0.4f), stroke.width, stroke.cap)
         }
     }
 }

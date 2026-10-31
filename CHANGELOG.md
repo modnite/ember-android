@@ -2,6 +2,9 @@
 
 One entry per release. All dates are 2026.
 
+## 1.1.3 (31 Oct)
+- The wallpaper shapes are drawn as clean single strokes: the flower, asterisk, bolt, speech bubble and leaf no longer overlap themselves.
+
 ## 1.1.2 (31 Oct)
 - Chat bubbles have the same shape as in the web app: round all the way, with the corner towards the sender tightened.
 - More room between bubbles, a little inside a run and more between runs.
