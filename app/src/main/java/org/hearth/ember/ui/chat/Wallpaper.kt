@@ -107,8 +107,10 @@ fun DrawScope.paintWallpaper(choice: String, photo: ImageBitmap?, dim: Int, acce
         else -> {
             // Doodles, as in the big messengers: small outlines scattered over a faint wash of the accent colour, turned a little each.
             drawRect(accent.copy(alpha = if (dark) 0.05f else 0.06f))
-            val cell = 42f * d
-            val ink = accent.copy(alpha = if (dark) 0.26f else 0.22f)
+            // Jumbled, not lined up, and full: every shape sits a little off its place, at its own size, turned any way, some a little fainter.
+            // The numbers come from a fixed hash of the place, so the picture is the same every time and the same on the web.
+            val cell = 40f * d
+            val base = if (dark) 0.26f else 0.22f
             val stroke = Stroke(width = 2.2f * d, cap = androidx.compose.ui.graphics.StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round)
             var row = 0
             var y = cell / 2
@@ -116,12 +118,18 @@ fun DrawScope.paintWallpaper(choice: String, photo: ImageBitmap?, dim: Int, acce
                 var col = 0
                 var x = if (row % 2 == 0) cell / 2 else cell
                 while (x < size.width + cell) {
-                    val kind = (row * 7 + col * 5 + (row / 2) * 3) % DOODLE_KINDS
-                    val turn = ((row * 37 + col * 53) % 90 - 45).toFloat()
-                    rotate(turn, Offset(x, y)) { doodle(kind, Offset(x, y), 8.5f * d, ink, stroke) }
+                    run {
+                        val px = x + (doodleUnit(row, col, 2) - 0.5f) * 0.4f * cell
+                        val py = y + (doodleUnit(row, col, 3) - 0.5f) * 0.4f * cell
+                        val scale = 0.8f + 0.3f * doodleUnit(row, col, 4)
+                        val turn = doodleUnit(row, col, 5) * 360f
+                        val kind = (doodleUnit(row, col, 6) * DOODLE_KINDS).toInt().coerceIn(0, DOODLE_KINDS - 1)
+                        val ink = accent.copy(alpha = base * (0.8f + 0.2f * doodleUnit(row, col, 7)))
+                        rotate(turn, Offset(px, py)) { doodle(kind, Offset(px, py), 8.5f * d * scale, ink, stroke) }
+                    }
                     x += cell; col++
                 }
-                y += cell * 0.9f; row++
+                y += cell * 0.95f; row++
             }
         }
     }
@@ -129,6 +137,14 @@ fun DrawScope.paintWallpaper(choice: String, photo: ImageBitmap?, dim: Int, acce
 
 /** How many different little shapes the doodle wallpaper scatters. */
 private const val DOODLE_KINDS = 16
+
+/** A number from 0 up to 1 that is always the same for the same row, column and purpose (the web app computes the identical one). */
+private fun doodleUnit(row: Int, col: Int, salt: Int): Float {
+    var h = row * 374761393 + col * 668265263 + salt * 1274126177.toInt()
+    h = (h xor (h ushr 13)) * 1274126177.toInt()
+    h = h xor (h ushr 16)
+    return (h and 0x7fffffff) % 10000 / 10000f
+}
 
 private fun DrawScope.doodle(kind: Int, c: Offset, r: Float, ink: Color, stroke: Stroke) {
     when (kind) {

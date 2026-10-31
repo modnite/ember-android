@@ -2,6 +2,9 @@
 
 One entry per release. All dates are 2026.
 
+## 1.1.5 (31 Oct)
+- The default wallpaper is jumbled and full: shapes sit off any grid, at different sizes, turned every way, with no empty patches. It is the same scatter as on the web.
+
 ## 1.1.4 (31 Oct)
 - Spelling suggestions stay on screen. The strip above the message box keeps the mistake it is on until you fix or ignore it, instead of vanishing when the cursor moves. It shows the word, how many mistakes there are (tap it for the next one), up to five suggestions, and Ignore for words you want left alone.
 - The squiggle under a mistake is an even zigzag, drawn at the foot of the line below the letters.
