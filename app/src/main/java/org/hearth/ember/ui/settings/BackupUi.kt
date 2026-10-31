@@ -1,5 +1,7 @@
 package org.hearth.ember.ui.settings
 
+import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import android.content.ClipData
@@ -267,11 +269,22 @@ fun BackupRows() {
         )
         is Dlg.Key -> AlertDialog(
             onDismissRequest = { dialog = null },
-            title = { Text("Your backup key") },
+            title = { Text("Backup key") },
             text = {
-                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(d.text, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace))
-                    Text("Key ${d.id}. Anyone who has this key and one of your backup files can read it, so keep it to yourself. The Ember backup reader on a computer asks for it, or for your sign-in.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    androidx.compose.foundation.text.selection.SelectionContainer {
+                        Text(
+                            d.text,
+                            style = MaterialTheme.typography.bodyMedium.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
+                            modifier = Modifier.fillMaxWidth()
+                                .clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .padding(12.dp),
+                        )
+                    }
+                    // The short ID is not secret: every backup file carries it, so you can see which key sealed which backup.
+                    Text("Key ID ${d.id}. Each backup stores it, so you can match keys to backups.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Keep this private: with a backup file it opens everything in it. The Backup Reader on a computer asks for it.", style = MaterialTheme.typography.bodyMedium)
                 }
             },
             confirmButton = {

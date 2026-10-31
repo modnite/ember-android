@@ -109,6 +109,7 @@ Signing, releasing and testing against a scratch server are in [docs/DEVELOPMENT
 | 1.0 | Stable release | Done |
 | 1.1 | Low battery warnings in calls, crash reports to the server, spell check test | Done |
 | 1.1.1 | Front camera flip for Samsung phones, restore dialog fits in landscape | Done |
+| 1.1.2 | Bubble shape and spacing, bolder wallpaper with more shapes, clearer backup key window | Done |
 
 ### Open items
 

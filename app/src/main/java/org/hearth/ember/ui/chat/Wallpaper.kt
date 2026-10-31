@@ -107,18 +107,18 @@ fun DrawScope.paintWallpaper(choice: String, photo: ImageBitmap?, dim: Int, acce
         else -> {
             // Doodles, as in the big messengers: small outlines scattered over a faint wash of the accent colour, turned a little each.
             drawRect(accent.copy(alpha = if (dark) 0.05f else 0.06f))
-            val cell = 54f * d
-            val ink = accent.copy(alpha = if (dark) 0.20f else 0.17f)
-            val stroke = Stroke(width = 1.5f * d, cap = androidx.compose.ui.graphics.StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round)
+            val cell = 42f * d
+            val ink = accent.copy(alpha = if (dark) 0.26f else 0.22f)
+            val stroke = Stroke(width = 2.2f * d, cap = androidx.compose.ui.graphics.StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round)
             var row = 0
             var y = cell / 2
             while (y < size.height + cell) {
                 var col = 0
                 var x = if (row % 2 == 0) cell / 2 else cell
                 while (x < size.width + cell) {
-                    val kind = (row * 3 + col * 5 + (row / 2)) % 7
+                    val kind = (row * 7 + col * 5 + (row / 2) * 3) % DOODLE_KINDS
                     val turn = ((row * 37 + col * 53) % 90 - 45).toFloat()
-                    rotate(turn, Offset(x, y)) { doodle(kind, Offset(x, y), 7.5f * d, ink, stroke) }
+                    rotate(turn, Offset(x, y)) { doodle(kind, Offset(x, y), 8.5f * d, ink, stroke) }
                     x += cell; col++
                 }
                 y += cell * 0.9f; row++
@@ -126,6 +126,9 @@ fun DrawScope.paintWallpaper(choice: String, photo: ImageBitmap?, dim: Int, acce
         }
     }
 }
+
+/** How many different little shapes the doodle wallpaper scatters. */
+private const val DOODLE_KINDS = 16
 
 private fun DrawScope.doodle(kind: Int, c: Offset, r: Float, ink: Color, stroke: Stroke) {
     when (kind) {
@@ -139,7 +142,68 @@ private fun DrawScope.doodle(kind: Int, c: Offset, r: Float, ink: Color, stroke:
             cubicTo(c.x - r * 1.9f, c.y - r * 0.2f, c.x - r * 0.9f, c.y - r * 1.5f, c.x, c.y - r * 0.4f)
             cubicTo(c.x + r * 0.9f, c.y - r * 1.5f, c.x + r * 1.9f, c.y - r * 0.2f, c.x, c.y + r * 0.9f)
         }, ink, style = stroke)
-        else -> drawRoundRect(ink, Offset(c.x - r, c.y - r * 0.7f), Size(r * 2, r * 1.4f), androidx.compose.ui.geometry.CornerRadius(r * 0.4f), style = stroke)
+        6 -> drawRoundRect(ink, Offset(c.x - r, c.y - r * 0.7f), Size(r * 2, r * 1.4f), androidx.compose.ui.geometry.CornerRadius(r * 0.4f), style = stroke)
+        // A star.
+        7 -> drawPath(Path().apply {
+            for (i in 0 until 10) {
+                val a = Math.toRadians(-90.0 + i * 36.0)
+                val rad = if (i % 2 == 0) r * 1.15f else r * 0.5f
+                val px = c.x + (rad * Math.cos(a)).toFloat()
+                val py = c.y + (rad * Math.sin(a)).toFloat()
+                if (i == 0) moveTo(px, py) else lineTo(px, py)
+            }
+            close()
+        }, ink, style = stroke)
+        // A lightning bolt.
+        8 -> drawPath(Path().apply {
+            moveTo(c.x + r * 0.3f, c.y - r * 1.2f); lineTo(c.x - r * 0.7f, c.y + r * 0.1f); lineTo(c.x - r * 0.05f, c.y + r * 0.1f)
+            lineTo(c.x - r * 0.3f, c.y + r * 1.2f); lineTo(c.x + r * 0.7f, c.y - r * 0.2f); lineTo(c.x + r * 0.05f, c.y - r * 0.2f); close()
+        }, ink, style = stroke)
+        // An asterisk.
+        9 -> for (deg in intArrayOf(0, 60, 120)) {
+            val a = Math.toRadians(deg.toDouble())
+            val dx = (r * 1.1f * Math.cos(a)).toFloat()
+            val dy = (r * 1.1f * Math.sin(a)).toFloat()
+            drawLine(ink, Offset(c.x - dx, c.y - dy), Offset(c.x + dx, c.y + dy), stroke.width, stroke.cap)
+        }
+        // A zigzag.
+        10 -> drawPath(Path().apply {
+            moveTo(c.x - r * 1.3f, c.y + r * 0.5f); lineTo(c.x - r * 0.65f, c.y - r * 0.5f); lineTo(c.x, c.y + r * 0.5f)
+            lineTo(c.x + r * 0.65f, c.y - r * 0.5f); lineTo(c.x + r * 1.3f, c.y + r * 0.5f)
+        }, ink, style = stroke)
+        // A music note.
+        11 -> {
+            drawOval(ink, Offset(c.x - r * 0.95f, c.y + r * 0.4f), Size(r * 1.1f, r * 0.8f), style = stroke)
+            drawLine(ink, Offset(c.x + r * 0.15f, c.y + r * 0.8f), Offset(c.x + r * 0.15f, c.y - r * 1.1f), stroke.width, stroke.cap)
+            drawPath(Path().apply { moveTo(c.x + r * 0.15f, c.y - r * 1.1f); quadraticBezierTo(c.x + r, c.y - r * 0.8f, c.x + r * 0.9f, c.y - r * 0.1f) }, ink, style = stroke)
+        }
+        // A flower: four petals round a small centre.
+        12 -> {
+            for ((dx, dy) in listOf(0.55f to 0f, -0.55f to 0f, 0f to 0.55f, 0f to -0.55f)) drawCircle(ink, r * 0.5f, Offset(c.x + dx * r, c.y + dy * r), style = stroke)
+            drawCircle(ink, r * 0.2f, c, style = stroke)
+        }
+        // A crescent moon.
+        13 -> drawPath(Path().apply {
+            moveTo(c.x + r * 0.2f, c.y - r * 1.1f)
+            cubicTo(c.x - r * 1.4f, c.y - r * 1.1f, c.x - r * 1.4f, c.y + r * 1.1f, c.x + r * 0.2f, c.y + r * 1.1f)
+            cubicTo(c.x - r * 0.7f, c.y + r * 0.7f, c.x - r * 0.7f, c.y - r * 0.7f, c.x + r * 0.2f, c.y - r * 1.1f)
+            close()
+        }, ink, style = stroke)
+        // A speech bubble.
+        14 -> {
+            drawRoundRect(ink, Offset(c.x - r * 1.1f, c.y - r * 0.8f), Size(r * 2.2f, r * 1.3f), androidx.compose.ui.geometry.CornerRadius(r * 0.4f), style = stroke)
+            drawPath(Path().apply { moveTo(c.x - r * 0.5f, c.y + r * 0.5f); lineTo(c.x - r * 0.7f, c.y + r * 1.1f); lineTo(c.x - r * 0.05f, c.y + r * 0.5f) }, ink, style = stroke)
+        }
+        // A leaf with its vein.
+        else -> {
+            drawPath(Path().apply {
+                moveTo(c.x - r * 1.1f, c.y + r * 0.6f)
+                quadraticBezierTo(c.x - r * 0.8f, c.y - r * 1.1f, c.x + r * 1.1f, c.y - r * 0.7f)
+                quadraticBezierTo(c.x + r * 0.8f, c.y + r * 0.9f, c.x - r * 1.1f, c.y + r * 0.6f)
+                close()
+            }, ink, style = stroke)
+            drawLine(ink, Offset(c.x - r, c.y + r * 0.6f), Offset(c.x + r * 0.5f, c.y - r * 0.4f), stroke.width, stroke.cap)
+        }
     }
 }
 

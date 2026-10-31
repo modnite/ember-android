@@ -120,12 +120,12 @@ fun MessageBubble(
     val haptic = LocalHapticFeedback.current
     var drag by remember { mutableFloatStateOf(0f) }
     val showName = !mine && !room.isDm && firstOfGroup
-    // A tail on the first bubble of a run (the sharp corner at the top, towards the sender); every other corner is soft.
-    val soft = 14.dp
-    val tail = 3.dp
+    // Round corners all the way round, with the corner at the bottom towards the sender tightened: the same shape as the web app's bubbles.
+    val soft = 16.dp
+    val tail = 5.dp
     val shape = RoundedCornerShape(
-        topStart = if (!mine && firstOfGroup) tail else soft, topEnd = if (mine && firstOfGroup) tail else soft,
-        bottomStart = soft, bottomEnd = soft,
+        topStart = soft, topEnd = soft,
+        bottomStart = if (!mine) tail else soft, bottomEnd = if (mine) tail else soft,
     )
     val base = if (mine) colors.bubbleMine else colors.bubbleTheirs
     // A picked message is plainly marked: a tint over the bubble, a ring round it, and a faint wash across its row.
@@ -177,7 +177,8 @@ fun MessageBubble(
         Modifier
             .fillMaxWidth()
             .then(if (selected) Modifier.background(accent.copy(alpha = 0.10f)) else Modifier)
-            .padding(horizontal = 8.dp, vertical = if (lastOfGroup) 2.dp else 0.5.dp)
+            // Room between bubbles: a little inside a run, more between runs.
+            .padding(start = 8.dp, end = 8.dp, top = if (firstOfGroup) 6.dp else 1.5.dp, bottom = 1.5.dp)
             .offset { IntOffset(drag.roundToInt(), 0) }
             .pointerInput(message.id) {
                 detectHorizontalDragGestures(

@@ -2,6 +2,12 @@
 
 One entry per release. All dates are 2026.
 
+## 1.1.2 (31 Oct)
+- Chat bubbles have the same shape as in the web app: round all the way, with the corner towards the sender tightened.
+- More room between bubbles, a little inside a run and more between runs.
+- The doodle wallpaper is bolder and closer together, with sixteen different shapes instead of seven.
+- The backup key window is shorter: the key in its own box, what the key ID is for, and one line about keeping it private.
+
 ## 1.1.1 (30 Oct)
 - Samsung front cameras deliver an already flipped picture. Others saw you mirrored (writing backwards) and your own preview looked wrong. The picture is now flipped once before it is sent, so others see you as you are (writing reads the right way round). Settings, Chats and calls, Flip front camera for others is on by default for Samsung.
 - Mirror my own picture (Settings, Chats and calls): on by default, you see yourself like in a mirror. Switch it off to see the picture as others see it.
