@@ -166,11 +166,20 @@ class Prefs(context: Context) {
     val instantDelivery: StateFlow<Boolean> = _instant.asStateFlow()
     fun setInstantDelivery(on: Boolean) { p.edit().putBoolean("instantDelivery", on).apply(); _instant.value = on }
 
-    /** The picture behind chats (see Wallpapers): a preset's name or "photo", how much a photo is darkened, and a counter that changes when the photo does. */
-    private val _wallpaper = MutableStateFlow(p.getString("wallpaper", Wallpapers.DOODLE) ?: Wallpapers.DOODLE)
+    /**
+     * The picture behind chats (see Wallpapers): "default", "accent" or "photo", whether doodles are drawn on it, how much it is dimmed, and a
+     * counter that changes when the photo does. Older versions stored doodle, plain, gradient and dots.
+     */
+    private val oldWallpaper = p.getString("wallpaper", null)
+    private val _wallpaper = MutableStateFlow(
+        when (oldWallpaper) { Wallpapers.PHOTO -> Wallpapers.PHOTO; Wallpapers.ACCENT, "gradient" -> Wallpapers.ACCENT; else -> Wallpapers.DEFAULT },
+    )
     val wallpaper: StateFlow<String> = _wallpaper.asStateFlow()
     fun setWallpaper(v: String) { p.edit().putString("wallpaper", v).apply(); _wallpaper.value = v }
-    private val _wallpaperDim = MutableStateFlow(p.getInt("wallpaperDim", 25))
+    private val _doodles = MutableStateFlow(p.getBoolean("doodles", oldWallpaper != "plain" && oldWallpaper != "gradient"))
+    val doodles: StateFlow<Boolean> = _doodles.asStateFlow()
+    fun setDoodles(on: Boolean) { p.edit().putBoolean("doodles", on).apply(); _doodles.value = on }
+    private val _wallpaperDim = MutableStateFlow(p.getInt("wallpaperDim", 0))
     val wallpaperDim: StateFlow<Int> = _wallpaperDim.asStateFlow()
     fun setWallpaperDim(v: Int) { p.edit().putInt("wallpaperDim", v.coerceIn(0, 70)).apply(); _wallpaperDim.value = v.coerceIn(0, 70) }
     private val _wallpaperVersion = MutableStateFlow(0)

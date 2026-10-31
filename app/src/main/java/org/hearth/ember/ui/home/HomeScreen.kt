@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.only
@@ -197,7 +199,7 @@ private fun NarrowHome(nav: NavHostController) {
         // The bars below add their own top inset; the content box only needs the sides and bottom.
         contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal),
         bottomBar = {
-            NavigationBar(modifier = if (landscape) Modifier.height(56.dp) else Modifier, containerColor = MaterialTheme.colorScheme.surfaceContainer) {
+            NavigationBar(modifier = if (landscape) Modifier.height(60.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()) else Modifier, containerColor = MaterialTheme.colorScheme.surfaceContainer) {
                 Tab.entries.forEachIndexed { i, t ->
                     val count = when (t) { Tab.Chats -> unread; Tab.Contacts -> waiting; else -> 0 }
                     NavigationBarItem(

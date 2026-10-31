@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -39,6 +40,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
@@ -53,14 +55,12 @@ import kotlin.math.max
 import org.hearth.ember.ember
 import org.hearth.ember.ui.theme.EmberTheme
 
-/** The picture behind a chat: a pattern that takes the accent colour, a plain colour, or a photo from the gallery. */
+/** The picture behind a chat: the chat's own colour (or a wash of the accent, or a photo), doodles you can switch off, and dimming. */
 object Wallpapers {
-    const val DOODLE = "doodle"
-    const val PLAIN = "plain"
-    const val GRADIENT = "gradient"
-    const val DOTS = "dots"
+    const val DEFAULT = "default"
+    const val ACCENT = "accent"
     const val PHOTO = "photo"
-    val presets = listOf(DOODLE to "Doodles", GRADIENT to "Gradient", DOTS to "Dots", PLAIN to "Plain")
+    val presets = listOf(DEFAULT to "Default", ACCENT to "Accent colour")
 
     fun photoFile(context: Context) = File(context.filesDir, "chat-wallpaper.jpg")
 
@@ -76,94 +76,147 @@ object Wallpapers {
         true
     }.getOrDefault(false)
 
-    fun label(choice: String) = presets.firstOrNull { it.first == choice }?.second ?: if (choice == PHOTO) "Your photo" else "Doodles"
+    fun label(choice: String, doodles: Boolean): String = when (choice) {
+        PHOTO -> "Your photo"
+        else -> (presets.firstOrNull { it.first == choice }?.second ?: "Default") + if (doodles) ", with doodles" else ", no doodles"
+    }
 }
 
-/** Paints a wallpaper. [accent] is what the pattern takes its colour from, [bg] the chat's own background, [dim] (0 to 70) darkens a photo. */
-fun DrawScope.paintWallpaper(choice: String, photo: ImageBitmap?, dim: Int, accent: Color, bg: Color) {
+/** The flat colour under the doodles: the chat's own colour, or the accent washed light, dark or darkest to suit the theme (the web app does the same). */
+fun washColor(choice: String, accent: Color, bg: Color): Color {
+    if (choice != Wallpapers.ACCENT) return bg
+    val hsv = FloatArray(3)
+    android.graphics.Color.colorToHSV(accent.toArgb(), hsv)
+    val dark = bg.luminance() < 0.5f
+    val black = bg == Color.Black
+    return when {
+        black -> Color.hsl(hsv[0], 0.35f, 0.10f)
+        dark -> Color.hsl(hsv[0], 0.40f, 0.17f)
+        else -> Color.hsl(hsv[0], 0.55f, 0.86f)
+    }
+}
+
+/** Paints a wallpaper. [accent] is what the doodles take their colour from, [bg] the chat's own background, [dim] (0 to 70) darkens everything. */
+fun DrawScope.paintWallpaper(choice: String, doodles: Boolean, photo: ImageBitmap?, dim: Int, accent: Color, bg: Color) {
     val dark = bg.luminance() < 0.5f
     val d = density
-    when {
-        choice == Wallpapers.PHOTO && photo != null -> {
-            val scale = max(size.width / photo.width, size.height / photo.height)
-            val src = IntSize((size.width / scale).toInt().coerceAtLeast(1), (size.height / scale).toInt().coerceAtLeast(1))
-            drawImage(photo, srcOffset = IntOffset((photo.width - src.width) / 2, (photo.height - src.height) / 2), srcSize = src, dstSize = IntSize(size.width.toInt(), size.height.toInt()))
-            if (dim > 0) drawRect(Color.Black.copy(alpha = dim / 100f))
-        }
-        choice == Wallpapers.PLAIN -> Unit
-        choice == Wallpapers.GRADIENT -> drawRect(
-            Brush.linearGradient(listOf(accent.copy(alpha = if (dark) 0.30f else 0.26f), accent.copy(alpha = if (dark) 0.04f else 0.03f)), start = Offset.Zero, end = Offset(size.width, size.height)),
-        )
-        choice == Wallpapers.DOTS -> {
-            val gap = 22f * d
-            val ink = accent.copy(alpha = if (dark) 0.22f else 0.20f)
-            var y = gap / 2
-            var row = 0
-            while (y < size.height) {
-                var x = if (row % 2 == 0) gap / 2 else gap
-                while (x < size.width) { drawCircle(ink, radius = 1.6f * d, center = Offset(x, y)); x += gap }
-                y += gap * 0.8f; row++
-            }
-        }
-        else -> {
-            // Doodles in the way of the big messengers: larger outline icons, with small dots, rings and sparkles filling every gap between them.
-            // Where each one goes comes from a fixed hash of its place, so the picture is the same every time and the same on the web.
-            drawRect(accent.copy(alpha = if (dark) 0.05f else 0.06f))
+    if (choice == Wallpapers.PHOTO && photo != null) {
+        val scale = max(size.width / photo.width, size.height / photo.height)
+        val src = IntSize((size.width / scale).toInt().coerceAtLeast(1), (size.height / scale).toInt().coerceAtLeast(1))
+        drawImage(photo, srcOffset = IntOffset((photo.width - src.width) / 2, (photo.height - src.height) / 2), srcSize = src, dstSize = IntSize(size.width.toInt(), size.height.toInt()))
+    } else {
+        drawRect(washColor(choice, accent, bg))
+        if (doodles) {
             val base = if (dark) 0.26f else 0.22f
             val widthW = size.width / d
             val heightW = size.height / d
-            val bigRows = (heightW / DOODLE_BIG_CELL).toInt() + 2
-            val bigCols = (widthW / DOODLE_BIG_CELL).toInt() + 2
-            for (row in 0 until bigRows) for (col in 0 until bigCols) {
-                val p = bigDoodle(row, col)
-                doodleAt(bigPaths[p.kind], p, accent.copy(alpha = base * p.fade), 1.9f * d, d)
-            }
-            for (row in 0 until (heightW / DOODLE_FILL_CELL).toInt() + 2) for (col in 0 until (widthW / DOODLE_FILL_CELL).toInt() + 2) {
-                val p = fillDoodle(row, col) ?: continue
-                doodleAt(fillPaths[p.kind], p, accent.copy(alpha = base * p.fade), 1.5f * d, d)
+            val tile = DoodleLayout.tile
+            // The picture joins up with itself every tile, so any screen size is covered.
+            for (ty in 0..(heightW / tile.height).toInt()) for (tx in 0..(widthW / tile.width).toInt()) {
+                val ox = tx * tile.width
+                val oy = ty * tile.height
+                for (p in tile.bigs) if (p.x + ox - p.r * 1.5f < widthW && p.y + oy - p.r * 1.5f < heightW) doodleAt(bigPaths[p.kind], p, ox, oy, accent.copy(alpha = base * p.fade), 1.9f * d, d)
+                for (p in tile.fills) if (p.x + ox - p.r * 1.5f < widthW && p.y + oy - p.r * 1.5f < heightW) doodleAt(fillPaths[p.kind], p, ox, oy, accent.copy(alpha = base * p.fade), 1.5f * d, d)
             }
         }
     }
+    if (dim > 0) drawRect(Color.Black.copy(alpha = dim / 100f))
 }
 
 /** One doodle in place: where its centre is, how big (half its width), how far it is turned, which shape, and how faint. All in dp. */
 private class Placed(val x: Float, val y: Float, val r: Float, val turn: Float, val kind: Int, val fade: Float)
 
-private const val DOODLE_BIG_CELL = 66f
-private const val DOODLE_FILL_CELL = 16.5f
+private class Tile(val width: Float, val height: Float, val bigs: List<Placed>, val fills: List<Placed>)
 
-/** A number from 0 up to 1 that is always the same for the same row, column and purpose (the web app computes the identical one). */
-private fun doodleUnit(row: Int, col: Int, salt: Int): Float {
-    var h = row * 374761393 + col * 668265263 + salt * 1274126177.toInt()
-    h = (h xor (h ushr 13)) * 1274126177.toInt()
-    h = h xor (h ushr 16)
-    return (h and 0x7fffffff) % 10000 / 10000f
-}
+/** Where every doodle goes. The same hash, spacing and rules as the web app, so both draw the same picture. */
+private object DoodleLayout {
+    private const val BIG_COLS = 22
+    private const val BIG_ROWS = 20
+    private const val BIG_CELL = 70f
+    private const val BIG_ROW = 63f
+    private const val FILL_CELL = 17.5f
 
-/** The large icon of a place: a little off its spot, a little different in size, tipped a little either way. */
-private fun bigDoodle(row: Int, col: Int) = Placed(
-    x = (col + 0.5f) * DOODLE_BIG_CELL + (doodleUnit(row, col, 2) - 0.5f) * 0.36f * DOODLE_BIG_CELL,
-    y = (row + 0.5f) * DOODLE_BIG_CELL + (doodleUnit(row, col, 3) - 0.5f) * 0.36f * DOODLE_BIG_CELL,
-    r = 12f + 5f * doodleUnit(row, col, 4),
-    turn = (doodleUnit(row, col, 5) - 0.5f) * 70f,
-    kind = (doodleUnit(row, col, 6) * DoodleShapes.big.size).toInt().coerceIn(0, DoodleShapes.big.size - 1),
-    fade = 0.8f + 0.2f * doodleUnit(row, col, 7),
-)
+    val tile: Tile by lazy { build() }
 
-/** The small shape of a place (most are dots), or null when a large icon is too close. */
-private fun fillDoodle(row: Int, col: Int): Placed? {
-    val x = (col + 0.5f) * DOODLE_FILL_CELL + (doodleUnit(row, col, 12) - 0.5f) * 0.7f * DOODLE_FILL_CELL
-    val y = (row + 0.5f) * DOODLE_FILL_CELL + (doodleUnit(row, col, 13) - 0.5f) * 0.7f * DOODLE_FILL_CELL
-    val r = 2.5f + 3f * doodleUnit(row, col, 14)
-    val bigRow = Math.floor((y / DOODLE_BIG_CELL).toDouble()).toInt()
-    val bigCol = Math.floor((x / DOODLE_BIG_CELL).toDouble()).toInt()
-    for (dr in -1..1) for (dc in -1..1) {
-        val b = bigDoodle(bigRow + dr, bigCol + dc)
-        if (Math.hypot((x - b.x).toDouble(), (y - b.y).toDouble()) < b.r * 1.3 + r + 2) return null
+    /** A number from 0 up to 1 that is always the same for the same row, column and purpose (the web app computes the identical one). */
+    private fun unit(row: Int, col: Int, salt: Int): Float {
+        var h = row * 374761393 + col * 668265263 + salt * 1274126177.toInt()
+        h = (h xor (h ushr 13)) * 1274126177.toInt()
+        h = h xor (h ushr 16)
+        return (h and 0x7fffffff) % 10000 / 10000f
     }
-    val pick = doodleUnit(row, col, 16)
-    val kind = if (pick < 0.4f) 0 else 1 + (doodleUnit(row, col, 17) * (DoodleShapes.fill.size - 1)).toInt().coerceIn(0, DoodleShapes.fill.size - 2)
-    return Placed(x, y, r, doodleUnit(row, col, 15) * 360f, kind, 0.7f + 0.3f * doodleUnit(row, col, 18))
+
+    private fun mod(n: Int, m: Int) = ((n % m) + m) % m
+
+    /** Rows are staggered, then every icon is moved off its spot and pushed clear of those already placed; its kind is one not used near it. */
+    private fun layoutBig(kinds: Int): List<Placed> {
+        val placed = arrayOfNulls<Placed>(BIG_ROWS * BIG_COLS)
+        val w = BIG_COLS * BIG_CELL
+        val h = BIG_ROWS * BIG_ROW
+        for (row in 0 until BIG_ROWS) for (col in 0 until BIG_COLS) {
+            var x = (col + 0.5f + 0.5f * (row and 1)) * BIG_CELL + (unit(row, col, 2) - 0.5f) * 0.5f * BIG_CELL
+            var y = (row + 0.5f) * BIG_ROW + (unit(row, col, 3) - 0.5f) * 0.5f * BIG_ROW
+            val r = 12f + 4f * unit(row, col, 4)
+            val used = HashSet<Int>()
+            for (dr in -3..3) for (dc in -3..3) {
+                val rr = row + dr
+                val cc = col + dc
+                val n = placed[mod(rr, BIG_ROWS) * BIG_COLS + mod(cc, BIG_COLS)] ?: continue
+                used.add(n.kind)
+                if (Math.abs(dr) > 2 || Math.abs(dc) > 2) continue
+                val nx = n.x + Math.floorDiv(cc, BIG_COLS) * w
+                val ny = n.y + Math.floorDiv(rr, BIG_ROWS) * h
+                val dist = Math.hypot((x - nx).toDouble(), (y - ny).toDouble()).toFloat()
+                val least = r + n.r + 5f
+                if (dist < least) {
+                    val a = unit(row, col, 9) * Math.PI.toFloat() * 2f
+                    val ux = if (dist < 0.01f) Math.cos(a.toDouble()).toFloat() else (x - nx) / dist
+                    val uy = if (dist < 0.01f) Math.sin(a.toDouble()).toFloat() else (y - ny) / dist
+                    x += ux * (least - dist)
+                    y += uy * (least - dist)
+                }
+            }
+            val free = (0 until kinds).filter { it !in used }
+            val pool = free.ifEmpty { (0 until kinds).toList() }
+            placed[row * BIG_COLS + col] = Placed(
+                x, y, r, (unit(row, col, 5) - 0.5f) * 70f,
+                pool[Math.min(pool.size - 1, (unit(row, col, 6) * pool.size).toInt())], 0.8f + 0.2f * unit(row, col, 7),
+            )
+        }
+        return placed.map { it!! }
+    }
+
+    private fun build(): Tile {
+        val w = BIG_COLS * BIG_CELL
+        val h = BIG_ROWS * BIG_ROW
+        val bigs = layoutBig(DoodleShapes.big.size)
+        // Every large icon (and its copies one tile away) by place, so a small shape only looks at the ones near it.
+        val bucket = HashMap<Long, MutableList<Placed>>()
+        fun key(cx: Int, cy: Int) = cx.toLong() * 100000L + cy
+        for (b in bigs) for (dx in listOf(0f, -w, w)) for (dy in listOf(0f, -h, h)) {
+            val q = Placed(b.x + dx, b.y + dy, b.r, b.turn, b.kind, b.fade)
+            if (q.x < -BIG_CELL * 2 || q.x > w + BIG_CELL * 2 || q.y < -BIG_ROW * 2 || q.y > h + BIG_ROW * 2) continue
+            bucket.getOrPut(key(Math.floor((q.x / BIG_CELL).toDouble()).toInt(), Math.floor((q.y / BIG_ROW).toDouble()).toInt())) { mutableListOf() }.add(q)
+        }
+        val fills = ArrayList<Placed>()
+        val fillKinds = DoodleShapes.fill.size
+        for (row in 0 until (h / FILL_CELL).toInt()) for (col in 0 until (w / FILL_CELL).toInt()) {
+            val x = (col + 0.5f) * FILL_CELL + (unit(row, col, 12) - 0.5f) * 0.8f * FILL_CELL
+            val y = (row + 0.5f) * FILL_CELL + (unit(row, col, 13) - 0.5f) * 0.8f * FILL_CELL
+            val r = 2.5f + 3f * unit(row, col, 14)
+            val cx = Math.floor((x / BIG_CELL).toDouble()).toInt()
+            val cy = Math.floor((y / BIG_ROW).toDouble()).toInt()
+            var clear = true
+            loop@ for (i in -1..1) for (j in -1..1) for (b in bucket[key(cx + i, cy + j)] ?: emptyList<Placed>()) {
+                if (Math.hypot((x - b.x).toDouble(), (y - b.y).toDouble()) < b.r * 1.3 + r + 2) { clear = false; break@loop }
+            }
+            if (!clear) continue
+            val pick = unit(row, col, 16)
+            val kind = if (pick < 0.35f) 0 else 1 + Math.min(fillKinds - 2, (unit(row, col, 17) * (fillKinds - 1)).toInt())
+            fills.add(Placed(x, y, r, unit(row, col, 15) * 360f, kind, 0.7f + 0.3f * unit(row, col, 18)))
+        }
+        return Tile(w, h, bigs, fills)
+    }
 }
 
 private val bigPaths: List<Path> by lazy { DoodleShapes.big.map(::unitPath) }
@@ -196,11 +249,11 @@ private fun unitPath(d: String): Path {
     return path
 }
 
-/** Draw a doodle where it was placed. [density] turns dp into pixels; the line stays the same width however big the shape. */
-private fun DrawScope.doodleAt(path: Path, p: Placed, ink: Color, strokePx: Float, density: Float) {
+/** Draw a doodle where it was placed, [ox] and [oy] dp into the picture. [density] turns dp into pixels; the line stays the same width however big the shape. */
+private fun DrawScope.doodleAt(path: Path, p: Placed, ox: Float, oy: Float, ink: Color, strokePx: Float, density: Float) {
     val r = p.r * density
     withTransform({
-        translate(p.x * density, p.y * density)
+        translate((p.x + ox) * density, (p.y + oy) * density)
         rotate(p.turn, Offset.Zero)
         scale(r, r, Offset.Zero)
     }) {
@@ -213,21 +266,23 @@ private fun DrawScope.doodleAt(path: Path, p: Placed, ink: Color, strokePx: Floa
 fun Modifier.chatWallpaper(): Modifier {
     val app = LocalContext.current.ember
     val choice by app.prefs.wallpaper.collectAsState()
+    val doodles by app.prefs.doodles.collectAsState()
     val dim by app.prefs.wallpaperDim.collectAsState()
     val version by app.prefs.wallpaperVersion.collectAsState()
     val bg = EmberTheme.colors.chatBackground
     val accent = MaterialTheme.colorScheme.primary
     val context = LocalContext.current
     val photo = remember(choice, version) { if (choice == Wallpapers.PHOTO) BitmapFactory.decodeFile(Wallpapers.photoFile(context).path)?.asImageBitmap() else null }
-    return this.background(bg).drawBehind { paintWallpaper(choice, photo, dim, accent, bg) }
+    return this.background(bg).drawBehind { paintWallpaper(choice, doodles, photo, dim, accent, bg) }
 }
 
-/** The picker: a row of small previews (each drawn in the current accent colour), a photo from the gallery and how dark a photo is. */
+/** The picker: small previews (drawn in the current theme and accent), a photo from the gallery, the doodles switch and the dimming. */
 @Composable
 fun WallpaperDialog(onPickPhoto: () -> Unit, onDismiss: () -> Unit) {
     val app = LocalContext.current.ember
     val context = LocalContext.current
     val choice by app.prefs.wallpaper.collectAsState()
+    val doodles by app.prefs.doodles.collectAsState()
     val dim by app.prefs.wallpaperDim.collectAsState()
     val version by app.prefs.wallpaperVersion.collectAsState()
     val bg = EmberTheme.colors.chatBackground
@@ -238,8 +293,6 @@ fun WallpaperDialog(onPickPhoto: () -> Unit, onDismiss: () -> Unit) {
         title = { Text("Chat wallpaper") },
         text = {
             Column {
-                Text("The doodles take your accent colour, so they change when it does.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.height(12.dp))
                 val options = Wallpapers.presets + (if (photo != null) listOf(Wallpapers.PHOTO to "Your photo") else emptyList())
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     items(options.size) { i ->
@@ -247,7 +300,7 @@ fun WallpaperDialog(onPickPhoto: () -> Unit, onDismiss: () -> Unit) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Box(
                                 Modifier.size(width = 72.dp, height = 108.dp).clip(RoundedCornerShape(12.dp)).background(bg)
-                                    .drawBehind { paintWallpaper(id, photo, dim, accent, bg) }
+                                    .drawBehind { paintWallpaper(id, doodles, photo, dim, accent, bg) }
                                     .border(if (choice == id) 3.dp else 1.dp, if (choice == id) accent else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
                                     .clickable { app.prefs.setWallpaper(id) },
                             )
@@ -257,13 +310,18 @@ fun WallpaperDialog(onPickPhoto: () -> Unit, onDismiss: () -> Unit) {
                 }
                 Spacer(Modifier.height(8.dp))
                 TextButton(onClick = onPickPhoto) { Text(if (photo != null) "Choose another photo" else "Choose a photo") }
-                if (choice == Wallpapers.PHOTO) {
-                    Text("Darken the photo", style = MaterialTheme.typography.labelMedium)
-                    Slider(value = dim.toFloat(), onValueChange = { app.prefs.setWallpaperDim(it.toInt()) }, valueRange = 0f..70f)
+                if (choice != Wallpapers.PHOTO) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Doodles", Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+                        Switch(checked = doodles, onCheckedChange = { app.prefs.setDoodles(it) })
+                    }
                 }
+                Spacer(Modifier.height(8.dp))
+                Text("Dimming: $dim%", style = MaterialTheme.typography.labelMedium)
+                Slider(value = dim.toFloat(), onValueChange = { app.prefs.setWallpaperDim((it / 5).toInt() * 5) }, valueRange = 0f..70f)
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
-        dismissButton = { TextButton(onClick = { app.prefs.setWallpaper(Wallpapers.DOODLE) }) { Text("Reset") } },
+        dismissButton = { TextButton(onClick = { app.prefs.setWallpaper(Wallpapers.DEFAULT); app.prefs.setDoodles(true); app.prefs.setWallpaperDim(0) }) { Text("Reset") } },
     )
 }

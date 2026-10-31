@@ -2,6 +2,12 @@
 
 One entry per release. All dates are 2026.
 
+## 1.1.7 (31 Oct)
+- Wallpapers work like the big messengers: a flat colour that follows the theme and accent, a switch for doodles, and a dimming slider. "Accent colour" washes the flat colour. A photo can still be used. Earlier choices carry over.
+- The doodles are now 84 large icons and 28 small shapes, placed off any grid, with no icon near a copy of itself. The same picture as the web app.
+- Settings are regrouped (Preferences, Account and security, About) with section headings, shorter wording, and two columns sideways. Sounds in chats moved to Notifications and sounds, crash reports to About.
+- Sideways, the bottom bar's highlight no longer touches the top edge.
+
 ## 1.1.6 (31 Oct)
 - The default wallpaper is a dense scatter in the way of the big messengers: 34 larger outline icons (camera, cup, headphones, umbrella, paw, gift and more) with small dots, rings and sparkles filling every gap. The same picture as on the web.
 

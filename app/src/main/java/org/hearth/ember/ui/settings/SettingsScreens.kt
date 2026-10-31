@@ -40,7 +40,10 @@ import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Search
@@ -104,38 +107,72 @@ fun SettingsTab(nav: NavHostController) {
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                 windowInsets = androidx.compose.foundation.layout.WindowInsets(0),
             )
+            val wide = androidx.compose.ui.platform.LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
             Row(
-                Modifier.fillMaxWidth().clickable { nav.navigate("profile") }.padding(horizontal = 20.dp, vertical = 14.dp),
+                Modifier.fillMaxWidth().clickable { nav.navigate("profile") }.padding(horizontal = 20.dp, vertical = if (wide) 6.dp else 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                UserAvatar(me, 64.dp)
+                UserAvatar(me, if (wide) 48.dp else 64.dp)
                 Spacer(Modifier.width(16.dp))
                 Column(Modifier.weight(1f)) {
                     Text(me?.displayName ?: "", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                     Text(
-                        me?.statusMessage?.ifBlank { null } ?: (me?.username ?: ""),
+                        me?.statusMessage?.ifBlank { null } ?: "@${me?.username ?: ""}",
                         style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
                     )
                 }
             }
             HorizontalDivider(Modifier.padding(vertical = 4.dp))
 
-            ActionRow(Icons.Filled.Notifications, "Notifications and sounds", "Alerts, message sound, ringtone") { nav.navigate("settings/notifications") }
-            ActionRow(Icons.Filled.DarkMode, "Appearance", "Theme, colours, chat wallpaper") { nav.navigate("settings/appearance") }
-            ActionRow(Icons.Filled.Keyboard, "Chats and calls", "Enter key, photos, nudges, echo") { nav.navigate("settings/chats") }
-            ActionRow(Icons.Filled.Search, "GIFs and stickers", "Search Giphy, Imgur and more") { nav.navigate("settings/online") }
-            ActionRow(Icons.Filled.Person, "Username and password", "Change either one") { nav.navigate("settings/account") }
-            ActionRow(Icons.Filled.Lock, "Two-step sign-in", "A code from an authenticator app at sign-in") { nav.navigate("settings/twostep") }
-            ActionRow(Icons.Filled.Backup, "Backup and encryption", "Automatic backups, restore, your key") { nav.navigate("settings/backup") }
-            UpdateRow()
-
-            HorizontalDivider(Modifier.padding(vertical = 4.dp))
-            Text(
-                "Signed in to ${app.store.server.removePrefix("https://")}",
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
-                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            ActionRow(Icons.AutoMirrored.Filled.Logout, "Sign out", "Remove this phone from your account", danger = true) { signOutDialog = true }
+            if (wide) {
+                Row(Modifier.fillMaxWidth()) {
+                    Column(Modifier.weight(1f)) {
+                SectionLabel("Preferences")
+                ActionRow(Icons.Filled.Notifications, "Notifications and sounds", "Alerts, message sound, ringtone") { nav.navigate("settings/notifications") }
+                ActionRow(Icons.Filled.DarkMode, "Appearance", "Theme, accent colour, chat wallpaper") { nav.navigate("settings/appearance") }
+                ActionRow(Icons.Filled.Keyboard, "Chats and calls", "Typing, photos, nudges, camera, echo") { nav.navigate("settings/chats") }
+                ActionRow(Icons.Filled.Search, "GIFs and stickers", "Where to search, optional keys") { nav.navigate("settings/online") }
+                    }
+                    Column(Modifier.weight(1f)) {
+                SectionLabel("Account and security")
+                ActionRow(Icons.Filled.Person, "Username and password", "Change either one") { nav.navigate("settings/account") }
+                ActionRow(Icons.Filled.Lock, "Two-step sign-in", "A code from an authenticator app") { nav.navigate("settings/twostep") }
+                ActionRow(Icons.Filled.Backup, "Backup and encryption", "Automatic backups, restore, your key") { nav.navigate("settings/backup") }
+                SectionLabel("About")
+                UpdateRow()
+                val crashReports by app.prefs.crashReports.collectAsState()
+                ToggleRow(Icons.Filled.BugReport, "Send crash reports", "To your Hearth server, so a fix can be made", crashReports) { on -> app.prefs.setCrashReports(on) }
+                HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                Text(
+                    "Signed in to ${app.store.server.removePrefix("https://")}",
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                ActionRow(Icons.AutoMirrored.Filled.Logout, "Sign out", "Stops messages on this phone until you sign in again", danger = true) { signOutDialog = true }
+                    }
+                }
+            } else {
+                SectionLabel("Preferences")
+                ActionRow(Icons.Filled.Notifications, "Notifications and sounds", "Alerts, message sound, ringtone") { nav.navigate("settings/notifications") }
+                ActionRow(Icons.Filled.DarkMode, "Appearance", "Theme, accent colour, chat wallpaper") { nav.navigate("settings/appearance") }
+                ActionRow(Icons.Filled.Keyboard, "Chats and calls", "Typing, photos, nudges, camera, echo") { nav.navigate("settings/chats") }
+                ActionRow(Icons.Filled.Search, "GIFs and stickers", "Where to search, optional keys") { nav.navigate("settings/online") }
+                SectionLabel("Account and security")
+                ActionRow(Icons.Filled.Person, "Username and password", "Change either one") { nav.navigate("settings/account") }
+                ActionRow(Icons.Filled.Lock, "Two-step sign-in", "A code from an authenticator app") { nav.navigate("settings/twostep") }
+                ActionRow(Icons.Filled.Backup, "Backup and encryption", "Automatic backups, restore, your key") { nav.navigate("settings/backup") }
+                SectionLabel("About")
+                UpdateRow()
+                val crashReports by app.prefs.crashReports.collectAsState()
+                ToggleRow(Icons.Filled.BugReport, "Send crash reports", "To your Hearth server, so a fix can be made", crashReports) { on -> app.prefs.setCrashReports(on) }
+                HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                Text(
+                    "Signed in to ${app.store.server.removePrefix("https://")}",
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                ActionRow(Icons.AutoMirrored.Filled.Logout, "Sign out", "Stops messages on this phone until you sign in again", danger = true) { signOutDialog = true }
+            }
             Spacer(Modifier.height(32.dp))
         }
     }
@@ -198,6 +235,7 @@ private fun NotificationsPage() {
     val app = context.ember
     val notifications by app.prefs.notificationsOn.collectAsState()
     val previews by app.prefs.previews.collectAsState()
+            SectionLabel("Alerts")
             ToggleRow(Icons.Filled.Notifications, "Message and call alerts", "Stay connected in the background so they arrive on time", notifications) { on ->
                 app.prefs.setNotifications(on)
                 Delivery.apply(app)
@@ -210,20 +248,24 @@ private fun NotificationsPage() {
             ) { app.prefs.setInstantDelivery(it); Delivery.apply(app) }
             if (notifications) ToggleRow(Icons.Filled.Visibility, "Show message text", "Off shows only “New message” on the lock screen", previews) { app.prefs.setPreviews(it) }
             UpdateNotifyRow()
-            val lowBattery by app.prefs.lowBatteryAlerts.collectAsState()
-            ToggleRow(Icons.Filled.BatteryAlert, "Low battery in calls", "Warns you and the others at 20, 15, 10 and 5 percent", lowBattery) { app.prefs.setLowBatteryAlerts(it) }
             if (notifications) ActionRow(Icons.Filled.BatteryChargingFull, "Battery", "Let Ember run without being put to sleep") {
                 val pm = context.getSystemService(PowerManager::class.java)
                 val intent = if (pm.isIgnoringBatteryOptimizations(context.packageName)) Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
                 else Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${context.packageName}"))
                 runCatching { context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
             }
+            val lowBattery by app.prefs.lowBatteryAlerts.collectAsState()
+            SectionLabel("Calls")
+            ToggleRow(Icons.Filled.BatteryAlert, "Low battery in calls", "Warns you and the others at 20, 15, 10 and 5 percent", lowBattery) { app.prefs.setLowBatteryAlerts(it) }
 }
 
 @Composable
 private fun SoundsPage() {
     val context = LocalContext.current
     val app = context.ember
+            SectionLabel("Sounds")
+            val soundsOn by app.prefs.soundsOn.collectAsState()
+            ToggleRow(Icons.Filled.MusicNote, "Sounds in chats", "Messages arriving, sending and typing", soundsOn) { on -> app.prefs.setSoundsOn(on) }
             val messageSound by app.prefs.messageSound.collectAsState()
             val callSound by app.prefs.callSound.collectAsState()
             fun chosen(result: androidx.activity.result.ActivityResult): Pair<Boolean, String?> {
@@ -246,16 +288,16 @@ private fun SoundsPage() {
                 "silent" -> "None"
                 else -> runCatching { android.media.RingtoneManager.getRingtone(context, Uri.parse(choice)).getTitle(context) }.getOrNull() ?: "Custom sound"
             }
-            ActionRow(Icons.Filled.Notifications, "Message sound", soundName(messageSound, android.media.RingtoneManager.TYPE_NOTIFICATION)) {
+            ActionRow(Icons.Filled.MusicNote, "Message sound", soundName(messageSound, android.media.RingtoneManager.TYPE_NOTIFICATION)) {
                 pickMessage.launch(picker(android.media.RingtoneManager.TYPE_NOTIFICATION, "Message sound", messageSound))
             }
-            ActionRow(Icons.Filled.Notifications, "Ringtone", soundName(callSound, android.media.RingtoneManager.TYPE_RINGTONE)) {
+            ActionRow(Icons.Filled.Call, "Ringtone", soundName(callSound, android.media.RingtoneManager.TYPE_RINGTONE)) {
                 pickCall.launch(picker(android.media.RingtoneManager.TYPE_RINGTONE, "Call ringtone", callSound))
             }
-            if (messageSound != null || callSound != null) ActionRow(Icons.Filled.Notifications, "Use Ember's own sounds", "Go back to the default chime and ringtone") {
+            if (messageSound != null || callSound != null) ActionRow(Icons.Filled.Refresh, "Use Ember's own sounds", "Go back to the default chime and ringtone") {
                 app.prefs.setMessageSound(null); app.prefs.setCallSound(null); app.notifier.createChannels()
             }
-            ActionRow(Icons.Filled.Notifications, "Try a message alert", "Shows one with your chosen sound") { app.notifier.test() }
+            ActionRow(Icons.Filled.Notifications, "Try a message alert", "Shows one now, with your chosen sound") { app.notifier.test() }
 }
 
 @Composable
@@ -269,16 +311,17 @@ private fun AppearancePage() {
     AccentRow()
     var wallpaperDialog by remember { mutableStateOf(false) }
     val wallpaperChoice by app.prefs.wallpaper.collectAsState()
+    val wallpaperDoodles by app.prefs.doodles.collectAsState()
     val pickWallpaper = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null && org.hearth.ember.ui.chat.Wallpapers.savePhoto(context, uri)) { app.prefs.photoChanged(); app.prefs.setWallpaper(org.hearth.ember.ui.chat.Wallpapers.PHOTO) }
     }
-    ActionRow(Icons.Filled.Palette, "Chat wallpaper", org.hearth.ember.ui.chat.Wallpapers.label(wallpaperChoice)) { wallpaperDialog = true }
+    ActionRow(Icons.Filled.PhotoLibrary, "Chat wallpaper", org.hearth.ember.ui.chat.Wallpapers.label(wallpaperChoice, wallpaperDoodles)) { wallpaperDialog = true }
     if (wallpaperDialog) org.hearth.ember.ui.chat.WallpaperDialog(
         onPickPhoto = { pickWallpaper.launch(androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly)) },
         onDismiss = { wallpaperDialog = false },
     )
             if (Build.VERSION.SDK_INT >= 31) {
-                ToggleRow(Icons.Filled.Palette, "Use phone colours", "Match your wallpaper instead of Ember orange", dynamic) { app.prefs.setDynamicColor(it) }
+                ToggleRow(Icons.Filled.Palette, "Use phone colours", "Take colours from your phone instead of Ember orange", dynamic) { app.prefs.setDynamicColor(it) }
             }
     if (themeDialog) AlertDialog(
         onDismissRequest = { themeDialog = false },
@@ -305,15 +348,14 @@ private fun ChatsPage() {
     val context = LocalContext.current
     val app = context.ember
     val enterSends by app.prefs.enterSends.collectAsState()
-    val soundsOn by app.prefs.soundsOn.collectAsState()
-            ToggleRow(Icons.Filled.Keyboard, "Enter sends", "Use the Enter key to send instead of adding a new line", enterSends) { app.prefs.setEnterSends(it) }
-    ToggleRow(Icons.Filled.Notifications, "Chat sounds", "Small sounds in a chat for messages arriving, sending and typing", soundsOn) { on -> app.prefs.setSoundsOn(on) }
+            SectionLabel("Typing")
+            ToggleRow(Icons.Filled.Keyboard, "Enter sends", "Off: Enter adds a new line", enterSends) { app.prefs.setEnterSends(it) }
     val spellCheck by app.prefs.spellCheck.collectAsState()
     val spellAvailable = remember { val c = org.hearth.ember.ui.chat.SpellChecker(app); val ok = c.available(); c.close(); ok }
     ToggleRow(Icons.Filled.Keyboard, "Check spelling", if (spellAvailable) "Underline misspelt words in the message box" else "Switch on a spell checker in Android Settings, General management, Keyboard list and defaults, Spell checker", spellCheck) { on -> app.prefs.setSpellCheck(on) }
     var spellReport by remember { mutableStateOf<SpellReport?>(null) }
     val spellScope = rememberCoroutineScope()
-    ActionRow(Icons.Filled.Keyboard, "Test spell checking", "Shows what your spell checker says") {
+    ActionRow(Icons.Filled.Keyboard, "Test spell checking", "See what your spell checker finds") {
         spellScope.launch {
             val sample = "this is a tesst of spelllcheck"
             val checker = org.hearth.ember.ui.chat.SpellChecker(app)
@@ -330,20 +372,20 @@ private fun ChatsPage() {
         }
     }
     spellReport?.let { report -> SpellReportDialog(report) { spellReport = null } }
+    SectionLabel("Photos and nudges")
+    val sendHd by app.prefs.sendHd.collectAsState()
+    ToggleRow(Icons.Filled.PhotoLibrary, "Send photos and videos in HD", "Sharper and larger. Off sends a smaller copy that arrives faster.", sendHd) { on -> app.prefs.setSendHd(on) }
+    val nudgeButton by app.prefs.nudgeButton.collectAsState()
+    ToggleRow(Icons.Filled.WavingHand, "Nudge button", "In the top bar of every chat. Off puts it in the paperclip menu.", nudgeButton) { on -> app.prefs.setNudgeButton(on) }
+    SectionLabel("Calls")
     val mirrorSelf by app.prefs.mirrorSelfPicture.collectAsState()
     ToggleRow(Icons.Filled.Cameraswitch, "Mirror my own picture", "You see yourself like in a mirror. Others see you as you are.", mirrorSelf) { on -> app.prefs.setMirrorSelfPicture(on) }
     val flipFront by app.prefs.flipFrontCamera.collectAsState()
     ToggleRow(Icons.Filled.Cameraswitch, "Flip front camera for others", "On if people see you mirrored, with writing backwards", flipFront) { on -> app.prefs.setFlipFrontCamera(on) }
-    val crashReports by app.prefs.crashReports.collectAsState()
-    ToggleRow(Icons.Filled.BugReport, "Send crash reports", "To your Hearth server, so a fix can be made", crashReports) { on -> app.prefs.setCrashReports(on) }
-    val sendHd by app.prefs.sendHd.collectAsState()
-    ToggleRow(Icons.Filled.PhotoLibrary, "Send photos and videos in HD", "Sharper and larger. Off sends a smaller copy that arrives faster.", sendHd) { on -> app.prefs.setSendHd(on) }
-    val nudgeButton by app.prefs.nudgeButton.collectAsState()
-    ToggleRow(Icons.Filled.WavingHand, "Nudge button", "In the top bar of every chat. Off puts Nudge in the paperclip menu.", nudgeButton) { on -> app.prefs.setNudgeButton(on) }
     val softwareEcho by app.prefs.softwareEcho.collectAsState()
             ToggleRow(
-                Icons.Filled.Hearing, "Ember's own echo cancelling in calls",
-                "On if the other person hears themselves back. From the next call.",
+                Icons.Filled.Hearing, "Extra echo cancelling",
+                "On if the other person hears themselves back. Applies from the next call.",
                 softwareEcho,
             ) { app.prefs.setSoftwareEcho(it) }
 }

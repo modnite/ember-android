@@ -30,28 +30,25 @@ fun OnlineRows() {
     fun open(url: String) = runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
 
     Text(
-        "In a chat, open the face button, then Stickers or GIFs, and pick a place to search. Tap a result to send it, press and hold to keep it in your favourites.",
+        "Open the face button in a chat, then Stickers or GIFs. Tap a result to send it. Press and hold to keep it in your favourites.",
         style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
     )
-    Heading("Works as it is, no signup")
+    Heading("Included, no sign-up")
     Text(
-        "Stickers: Signal's public sticker packs (thousands of community packs) and Google's animated emoji. GIFs: anime reaction GIFs (nekos.best) and Wikimedia Commons.",
+        "Stickers from Signal's public packs and Google's animated emoji. GIFs from nekos.best and Wikimedia Commons.",
         style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
     )
+    Heading("Your own keys (optional)")
     Text(
-        "The big GIF libraries (Giphy, Imgur) refuse anyone without a key. If you want them anyway, a free key of your own goes here.",
-        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+        "Giphy and Imgur only work with a free key. Searches go from this phone straight to them, never through your Hearth server.",
+        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
     )
-    Heading("Giphy: GIFs and stickers (optional)")
+    Heading("Giphy")
     KeyField(giphy, "Giphy API key", "Paste the key here") { giphy = it; settings.giphyKey = it }
     TextButton(onClick = { open("https://developers.giphy.com/dashboard/") }, modifier = Modifier.padding(horizontal = 12.dp)) { Text("Get a free Giphy key") }
-    Heading("Imgur: GIFs (optional)")
+    Heading("Imgur")
     KeyField(imgur, "Imgur client ID", "Paste the client ID here") { imgur = it; settings.imgurId = it }
     TextButton(onClick = { open("https://api.imgur.com/oauth2/addclient") }, modifier = Modifier.padding(horizontal = 12.dp)) { Text("Register for a free Imgur client ID") }
-    Text(
-        "Each service asks you to sign up and create an app. That is free, and the key is yours alone: Ember sends searches straight from this phone to the service and never through your Hearth server.",
-        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
-    )
 }
 
 @Composable
