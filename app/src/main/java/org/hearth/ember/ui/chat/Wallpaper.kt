@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
@@ -105,38 +106,31 @@ fun DrawScope.paintWallpaper(choice: String, photo: ImageBitmap?, dim: Int, acce
             }
         }
         else -> {
-            // Doodles, as in the big messengers: small outlines scattered over a faint wash of the accent colour, turned a little each.
+            // Doodles in the way of the big messengers: larger outline icons, with small dots, rings and sparkles filling every gap between them.
+            // Where each one goes comes from a fixed hash of its place, so the picture is the same every time and the same on the web.
             drawRect(accent.copy(alpha = if (dark) 0.05f else 0.06f))
-            // Jumbled, not lined up, and full: every shape sits a little off its place, at its own size, turned any way, some a little fainter.
-            // The numbers come from a fixed hash of the place, so the picture is the same every time and the same on the web.
-            val cell = 40f * d
             val base = if (dark) 0.26f else 0.22f
-            val stroke = Stroke(width = 2.2f * d, cap = androidx.compose.ui.graphics.StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round)
-            var row = 0
-            var y = cell / 2
-            while (y < size.height + cell) {
-                var col = 0
-                var x = if (row % 2 == 0) cell / 2 else cell
-                while (x < size.width + cell) {
-                    run {
-                        val px = x + (doodleUnit(row, col, 2) - 0.5f) * 0.4f * cell
-                        val py = y + (doodleUnit(row, col, 3) - 0.5f) * 0.4f * cell
-                        val scale = 0.8f + 0.3f * doodleUnit(row, col, 4)
-                        val turn = doodleUnit(row, col, 5) * 360f
-                        val kind = (doodleUnit(row, col, 6) * DOODLE_KINDS).toInt().coerceIn(0, DOODLE_KINDS - 1)
-                        val ink = accent.copy(alpha = base * (0.8f + 0.2f * doodleUnit(row, col, 7)))
-                        rotate(turn, Offset(px, py)) { doodle(kind, Offset(px, py), 8.5f * d * scale, ink, stroke) }
-                    }
-                    x += cell; col++
-                }
-                y += cell * 0.95f; row++
+            val widthW = size.width / d
+            val heightW = size.height / d
+            val bigRows = (heightW / DOODLE_BIG_CELL).toInt() + 2
+            val bigCols = (widthW / DOODLE_BIG_CELL).toInt() + 2
+            for (row in 0 until bigRows) for (col in 0 until bigCols) {
+                val p = bigDoodle(row, col)
+                doodleAt(bigPaths[p.kind], p, accent.copy(alpha = base * p.fade), 1.9f * d, d)
+            }
+            for (row in 0 until (heightW / DOODLE_FILL_CELL).toInt() + 2) for (col in 0 until (widthW / DOODLE_FILL_CELL).toInt() + 2) {
+                val p = fillDoodle(row, col) ?: continue
+                doodleAt(fillPaths[p.kind], p, accent.copy(alpha = base * p.fade), 1.5f * d, d)
             }
         }
     }
 }
 
-/** How many different little shapes the doodle wallpaper scatters. */
-private const val DOODLE_KINDS = 16
+/** One doodle in place: where its centre is, how big (half its width), how far it is turned, which shape, and how faint. All in dp. */
+private class Placed(val x: Float, val y: Float, val r: Float, val turn: Float, val kind: Int, val fade: Float)
+
+private const val DOODLE_BIG_CELL = 66f
+private const val DOODLE_FILL_CELL = 16.5f
 
 /** A number from 0 up to 1 that is always the same for the same row, column and purpose (the web app computes the identical one). */
 private fun doodleUnit(row: Int, col: Int, salt: Int): Float {
@@ -146,88 +140,71 @@ private fun doodleUnit(row: Int, col: Int, salt: Int): Float {
     return (h and 0x7fffffff) % 10000 / 10000f
 }
 
-private fun DrawScope.doodle(kind: Int, c: Offset, r: Float, ink: Color, stroke: Stroke) {
-    when (kind) {
-        0 -> drawCircle(ink, r, c, style = stroke)
-        1 -> { drawLine(ink, Offset(c.x - r, c.y), Offset(c.x + r, c.y), stroke.width, stroke.cap); drawLine(ink, Offset(c.x, c.y - r), Offset(c.x, c.y + r), stroke.width, stroke.cap) }
-        2 -> drawPath(Path().apply { moveTo(c.x, c.y - r); lineTo(c.x + r, c.y + r * 0.8f); lineTo(c.x - r, c.y + r * 0.8f); close() }, ink, style = stroke)
-        3 -> drawPath(Path().apply { moveTo(c.x - r * 1.2f, c.y); quadraticBezierTo(c.x - r * 0.6f, c.y - r, c.x, c.y); quadraticBezierTo(c.x + r * 0.6f, c.y + r, c.x + r * 1.2f, c.y) }, ink, style = stroke)
-        4 -> drawPath(Path().apply { moveTo(c.x, c.y - r); lineTo(c.x + r, c.y); lineTo(c.x, c.y + r); lineTo(c.x - r, c.y); close() }, ink, style = stroke)
-        5 -> drawPath(Path().apply {
-            moveTo(c.x, c.y + r * 0.9f)
-            cubicTo(c.x - r * 1.9f, c.y - r * 0.2f, c.x - r * 0.9f, c.y - r * 1.5f, c.x, c.y - r * 0.4f)
-            cubicTo(c.x + r * 0.9f, c.y - r * 1.5f, c.x + r * 1.9f, c.y - r * 0.2f, c.x, c.y + r * 0.9f)
-        }, ink, style = stroke)
-        6 -> drawRoundRect(ink, Offset(c.x - r, c.y - r * 0.7f), Size(r * 2, r * 1.4f), androidx.compose.ui.geometry.CornerRadius(r * 0.4f), style = stroke)
-        // A star.
-        7 -> drawPath(Path().apply {
-            for (i in 0 until 10) {
-                val a = Math.toRadians(-90.0 + i * 36.0)
-                val rad = if (i % 2 == 0) r * 1.15f else r * 0.5f
-                val px = c.x + (rad * Math.cos(a)).toFloat()
-                val py = c.y + (rad * Math.sin(a)).toFloat()
-                if (i == 0) moveTo(px, py) else lineTo(px, py)
-            }
-            close()
-        }, ink, style = stroke)
-        // A lightning bolt: one open stroke, so nothing crosses itself.
-        8 -> drawPath(Path().apply {
-            moveTo(c.x + r * 0.35f, c.y - r * 1.2f); lineTo(c.x - r * 0.55f, c.y + r * 0.15f); lineTo(c.x + r * 0.15f, c.y + r * 0.15f); lineTo(c.x - r * 0.35f, c.y + r * 1.2f)
-        }, ink, style = stroke)
-        // A four pointed sparkle.
-        9 -> drawPath(Path().apply {
-            moveTo(c.x, c.y - r * 1.2f)
-            quadraticBezierTo(c.x + r * 0.15f, c.y - r * 0.15f, c.x + r * 1.2f, c.y)
-            quadraticBezierTo(c.x + r * 0.15f, c.y + r * 0.15f, c.x, c.y + r * 1.2f)
-            quadraticBezierTo(c.x - r * 0.15f, c.y + r * 0.15f, c.x - r * 1.2f, c.y)
-            quadraticBezierTo(c.x - r * 0.15f, c.y - r * 0.15f, c.x, c.y - r * 1.2f)
-            close()
-        }, ink, style = stroke)
-        // A zigzag.
-        10 -> drawPath(Path().apply {
-            moveTo(c.x - r * 1.3f, c.y + r * 0.5f); lineTo(c.x - r * 0.65f, c.y - r * 0.5f); lineTo(c.x, c.y + r * 0.5f)
-            lineTo(c.x + r * 0.65f, c.y - r * 0.5f); lineTo(c.x + r * 1.3f, c.y + r * 0.5f)
-        }, ink, style = stroke)
-        // A music note.
-        11 -> {
-            drawOval(ink, Offset(c.x - r * 0.95f, c.y + r * 0.4f), Size(r * 1.1f, r * 0.8f), style = stroke)
-            drawLine(ink, Offset(c.x + r * 0.15f, c.y + r * 0.8f), Offset(c.x + r * 0.15f, c.y - r * 1.1f), stroke.width, stroke.cap)
-            drawPath(Path().apply { moveTo(c.x + r * 0.15f, c.y - r * 1.1f); quadraticBezierTo(c.x + r, c.y - r * 0.8f, c.x + r * 0.9f, c.y - r * 0.1f) }, ink, style = stroke)
+/** The large icon of a place: a little off its spot, a little different in size, tipped a little either way. */
+private fun bigDoodle(row: Int, col: Int) = Placed(
+    x = (col + 0.5f) * DOODLE_BIG_CELL + (doodleUnit(row, col, 2) - 0.5f) * 0.36f * DOODLE_BIG_CELL,
+    y = (row + 0.5f) * DOODLE_BIG_CELL + (doodleUnit(row, col, 3) - 0.5f) * 0.36f * DOODLE_BIG_CELL,
+    r = 12f + 5f * doodleUnit(row, col, 4),
+    turn = (doodleUnit(row, col, 5) - 0.5f) * 70f,
+    kind = (doodleUnit(row, col, 6) * DoodleShapes.big.size).toInt().coerceIn(0, DoodleShapes.big.size - 1),
+    fade = 0.8f + 0.2f * doodleUnit(row, col, 7),
+)
+
+/** The small shape of a place (most are dots), or null when a large icon is too close. */
+private fun fillDoodle(row: Int, col: Int): Placed? {
+    val x = (col + 0.5f) * DOODLE_FILL_CELL + (doodleUnit(row, col, 12) - 0.5f) * 0.7f * DOODLE_FILL_CELL
+    val y = (row + 0.5f) * DOODLE_FILL_CELL + (doodleUnit(row, col, 13) - 0.5f) * 0.7f * DOODLE_FILL_CELL
+    val r = 2.5f + 3f * doodleUnit(row, col, 14)
+    val bigRow = Math.floor((y / DOODLE_BIG_CELL).toDouble()).toInt()
+    val bigCol = Math.floor((x / DOODLE_BIG_CELL).toDouble()).toInt()
+    for (dr in -1..1) for (dc in -1..1) {
+        val b = bigDoodle(bigRow + dr, bigCol + dc)
+        if (Math.hypot((x - b.x).toDouble(), (y - b.y).toDouble()) < b.r * 1.3 + r + 2) return null
+    }
+    val pick = doodleUnit(row, col, 16)
+    val kind = if (pick < 0.4f) 0 else 1 + (doodleUnit(row, col, 17) * (DoodleShapes.fill.size - 1)).toInt().coerceIn(0, DoodleShapes.fill.size - 2)
+    return Placed(x, y, r, doodleUnit(row, col, 15) * 360f, kind, 0.7f + 0.3f * doodleUnit(row, col, 18))
+}
+
+private val bigPaths: List<Path> by lazy { DoodleShapes.big.map(::unitPath) }
+private val fillPaths: List<Path> by lazy { DoodleShapes.fill.map(::unitPath) }
+
+/** The shapes are written as SVG path data (only M, L, H, V, C, Q and Z) in a box from -1 to 1. */
+private fun unitPath(d: String): Path {
+    val path = Path()
+    val tokens = Regex("[MLHVCQZ]|-?\\d*\\.?\\d+").findAll(d).map { it.value }.toList()
+    var i = 0
+    var cmd = 'M'
+    var x = 0f
+    var y = 0f
+    fun num() = tokens[i++].toFloat()
+    while (i < tokens.size) {
+        if (tokens[i][0].isLetter()) {
+            cmd = tokens[i][0]
+            i++
+            if (cmd == 'Z') { path.close(); continue }
         }
-        // A drop.
-        12 -> drawPath(Path().apply {
-            moveTo(c.x, c.y - r * 1.2f)
-            cubicTo(c.x + r * 0.9f, c.y - r * 0.1f, c.x + r * 0.8f, c.y + r, c.x, c.y + r)
-            cubicTo(c.x - r * 0.8f, c.y + r, c.x - r * 0.9f, c.y - r * 0.1f, c.x, c.y - r * 1.2f)
-            close()
-        }, ink, style = stroke)
-        // A crescent moon.
-        13 -> drawPath(Path().apply {
-            moveTo(c.x + r * 0.2f, c.y - r * 1.1f)
-            cubicTo(c.x - r * 1.4f, c.y - r * 1.1f, c.x - r * 1.4f, c.y + r * 1.1f, c.x + r * 0.2f, c.y + r * 1.1f)
-            cubicTo(c.x - r * 0.7f, c.y + r * 0.7f, c.x - r * 0.7f, c.y - r * 0.7f, c.x + r * 0.2f, c.y - r * 1.1f)
-            close()
-        }, ink, style = stroke)
-        // A speech bubble, tail included, in one outline.
-        14 -> drawPath(Path().apply {
-            moveTo(c.x - r * 0.7f, c.y - r * 0.8f); lineTo(c.x + r * 0.7f, c.y - r * 0.8f)
-            quadraticBezierTo(c.x + r * 1.1f, c.y - r * 0.8f, c.x + r * 1.1f, c.y - r * 0.4f); lineTo(c.x + r * 1.1f, c.y + r * 0.1f)
-            quadraticBezierTo(c.x + r * 1.1f, c.y + r * 0.5f, c.x + r * 0.7f, c.y + r * 0.5f); lineTo(c.x - r * 0.05f, c.y + r * 0.5f)
-            lineTo(c.x - r * 0.7f, c.y + r * 1.1f); lineTo(c.x - r * 0.55f, c.y + r * 0.5f); lineTo(c.x - r * 0.7f, c.y + r * 0.5f)
-            quadraticBezierTo(c.x - r * 1.1f, c.y + r * 0.5f, c.x - r * 1.1f, c.y + r * 0.1f); lineTo(c.x - r * 1.1f, c.y - r * 0.4f)
-            quadraticBezierTo(c.x - r * 1.1f, c.y - r * 0.8f, c.x - r * 0.7f, c.y - r * 0.8f)
-            close()
-        }, ink, style = stroke)
-        // A leaf with its vein (the vein stays inside the outline).
-        else -> {
-            drawPath(Path().apply {
-                moveTo(c.x - r * 1.1f, c.y + r * 0.6f)
-                quadraticBezierTo(c.x - r * 0.8f, c.y - r * 1.1f, c.x + r * 1.1f, c.y - r * 0.7f)
-                quadraticBezierTo(c.x + r * 0.8f, c.y + r * 0.9f, c.x - r * 1.1f, c.y + r * 0.6f)
-                close()
-            }, ink, style = stroke)
-            drawLine(ink, Offset(c.x - r * 0.7f, c.y + r * 0.4f), Offset(c.x + r * 0.45f, c.y - r * 0.4f), stroke.width, stroke.cap)
+        when (cmd) {
+            'M' -> { x = num(); y = num(); path.moveTo(x, y); cmd = 'L' }
+            'L' -> { x = num(); y = num(); path.lineTo(x, y) }
+            'H' -> { x = num(); path.lineTo(x, y) }
+            'V' -> { y = num(); path.lineTo(x, y) }
+            'C' -> { val x1 = num(); val y1 = num(); val x2 = num(); val y2 = num(); x = num(); y = num(); path.cubicTo(x1, y1, x2, y2, x, y) }
+            'Q' -> { val x1 = num(); val y1 = num(); x = num(); y = num(); path.quadraticBezierTo(x1, y1, x, y) }
         }
+    }
+    return path
+}
+
+/** Draw a doodle where it was placed. [density] turns dp into pixels; the line stays the same width however big the shape. */
+private fun DrawScope.doodleAt(path: Path, p: Placed, ink: Color, strokePx: Float, density: Float) {
+    val r = p.r * density
+    withTransform({
+        translate(p.x * density, p.y * density)
+        rotate(p.turn, Offset.Zero)
+        scale(r, r, Offset.Zero)
+    }) {
+        drawPath(path, ink, style = Stroke(width = strokePx / r, cap = androidx.compose.ui.graphics.StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round))
     }
 }
 

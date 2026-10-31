@@ -2,6 +2,9 @@
 
 One entry per release. All dates are 2026.
 
+## 1.1.6 (31 Oct)
+- The default wallpaper is a dense scatter in the way of the big messengers: 34 larger outline icons (camera, cup, headphones, umbrella, paw, gift and more) with small dots, rings and sparkles filling every gap. The same picture as on the web.
+
 ## 1.1.5 (31 Oct)
 - The default wallpaper is jumbled and full: shapes sit off any grid, at different sizes, turned every way, with no empty patches. It is the same scatter as on the web.
 

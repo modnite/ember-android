@@ -1,6 +1,6 @@
 # Ember
 
-Native Android messenger for a [Hearth server](https://github.com/modnite/hearth-server). Kotlin, Jetpack Compose, Material 3. Package `org.hearth.ember`, minSdk 26, targetSdk 35. Current version: 1.1.5.
+Native Android messenger for a [Hearth server](https://github.com/modnite/hearth-server). Kotlin, Jetpack Compose, Material 3. Package `org.hearth.ember`, minSdk 26, targetSdk 35. Current version: 1.1.6.
 
 <p>
 <img src="docs/screenshots/chats.png" alt="Chats" width="24%">
@@ -113,6 +113,7 @@ Signing, releasing and testing against a scratch server are in [docs/DEVELOPMENT
 | 1.1.3 | Wallpaper shapes without overlaps | Done |
 | 1.1.4 | Spelling suggestions that stay, even zigzag squiggles, clearer spell check test | Done |
 | 1.1.5 | Jumbled, full default wallpaper | Done |
+| 1.1.6 | Dense messenger-style doodle wallpaper with 34 icons | Done |
 
 ### Open items
 
