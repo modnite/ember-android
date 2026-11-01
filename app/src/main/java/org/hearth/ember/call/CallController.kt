@@ -187,7 +187,15 @@ class CallController(private val app: EmberApp) {
     val fitMode = MutableStateFlow<Boolean?>(null)
     /** What is on screen right now, so the button can say what a press will do. */
     val shownFit = MutableStateFlow(false)
-    fun toggleFit() { fitMode.value = !shownFit.value }
+    /** In a group each tile fits or fills by itself until the button is pressed: what each tile shows now, so the button reflects the tiles and not just the last choice. */
+    val tileFit = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
+    fun gridFit(): Boolean = fitMode.value ?: tileFit.values.any { it }
+    fun toggleFit() {
+        // Taken from what is shown and applied to what is shown at once, so a quick second press never acts on a value that has not caught up yet.
+        val next = !shownFit.value
+        shownFit.value = next
+        fitMode.value = next
+    }
     /** Set it from what a tile is showing right now, so a quick second press never acts on a value that has not caught up yet. */
     fun setFit(fit: Boolean) { fitMode.value = fit }
     private val frameRatios = java.util.concurrent.ConcurrentHashMap<String, Float>()
@@ -525,6 +533,7 @@ class CallController(private val app: EmberApp) {
 
     fun hangup() {
         fitMode.value = null
+        tileFit.clear()
         mutedForMe.value = emptySet()
         frameRatios.clear()
         val s = _state.value

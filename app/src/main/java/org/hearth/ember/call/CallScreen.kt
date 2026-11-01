@@ -599,7 +599,7 @@ private fun Waiting(state: CallState) {
 @Composable
 private fun Grid(controller: CallController, people: List<CallPerson>, landscape: Boolean) {
     val chosenFit by controller.fitMode.collectAsState()
-    androidx.compose.runtime.SideEffect { controller.shownFit.value = chosenFit ?: false }
+    androidx.compose.runtime.SideEffect { controller.shownFit.value = controller.gridFit() }
     val columns = if (landscape) (if (people.size <= 3) people.size else if (people.size <= 8) 4 else 5) else if (people.size <= 4) 2 else 3
     val rows = (people.size + columns - 1) / columns
     Column(
@@ -638,6 +638,7 @@ private fun PersonTile(controller: CallController, p: CallPerson, modifier: Modi
     val fit = forceFit || (if (p.isLocal && !big) false else (manualFit ?: autoFit))
     // The big picture of someone else tells the call controls what is showing.
     if (big) androidx.compose.runtime.SideEffect { controller.shownFit.value = fit }
+    else if (!p.isLocal) androidx.compose.runtime.SideEffect { if (p.camOn && ratio > 0f) controller.tileFit[p.identity] = fit else controller.tileFit.remove(p.identity) }
     Box(
         modifier.background(Color(0xFF241C18)).onSizeChanged { tile = it }
             .then(if (ring && speaking) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(16.dp)) else Modifier),

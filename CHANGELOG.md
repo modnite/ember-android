@@ -2,6 +2,9 @@
 
 One entry per release. All dates are 2026.
 
+## 1.4.1 (1 Nov)
+- Group calls: the fit/fill button now follows what the tiles show. Before, with pictures fitting by themselves the first press changed nothing visible, and a quick second press acted on a stale value, so it felt fiddly. It now flips what you see at once, every press.
+
 ## 1.4.0 (1 Nov)
 - The ongoing call notification is the standard call notification: tap it to return to the call, End call and Mute (it says Unmute while you are muted) on it. From Android 12 it is drawn in the system call style.
 - Echo cancelling is on from the start on the Pixel 3 family (Pixel 3, 3 XL, 3a, 3a XL), whose own echo cancelling does badly on speakerphone: the other person on the call heard themselves. Settings, Extra echo cancelling can still switch it either way.
