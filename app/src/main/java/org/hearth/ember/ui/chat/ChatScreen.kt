@@ -1,6 +1,7 @@
 package org.hearth.ember.ui.chat
 
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -542,6 +543,7 @@ fun ChatScreen(nav: NavHostController, roomId: String, embedded: Boolean = false
             val shortWindow = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp < 500
             if (!(emojiSearching && shortWindow)) Composer(
                 text = draft, onText = { draft = it }, enterSends = enterSends, sending = sending,
+                members = if (room?.isDm == false) room.members else emptyList(), meId = meId,
                 onSend = { send() },
                 onEmoji = {
                     if (emojiForDraft) { emojiForDraft = false; fieldFocus.requestFocus(); keyboard?.show() }
@@ -653,7 +655,7 @@ private fun EncryptedNotice() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun Composer(
-    text: String, onText: (String) -> Unit, enterSends: Boolean, sending: Boolean, onSend: () -> Unit, onEmoji: () -> Unit, onNudge: () -> Unit, onRecord: () -> Unit,
+    text: String, onText: (String) -> Unit, enterSends: Boolean, sending: Boolean, onSend: () -> Unit, members: List<org.hearth.ember.data.User>, meId: String, onEmoji: () -> Unit, onNudge: () -> Unit, onRecord: () -> Unit,
     attachMenu: Boolean, onAttachMenu: (Boolean) -> Unit, onPhoto: () -> Unit, onFile: () -> Unit, onCamera: (video: Boolean) -> Unit,
     fieldFocus: androidx.compose.ui.focus.FocusRequester, onFieldFocused: () -> Unit, bottomInset: Boolean, panelOpen: Boolean,
 ) {
@@ -687,7 +689,32 @@ private fun Composer(
     val buttonHeight = if (compact) 44.dp else 56.dp
     val nudgeButton by LocalContext.current.ember.prefs.nudgeButton.collectAsState()
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    // Typing @ in a group lists its members; the list closes when the @ is part of something else (an email) or the name is finished.
+    val mention = if (members.isNotEmpty() && tfv.selection.collapsed) Mentions.trigger(tfv.text, tfv.selection.start) else null
+    val mentionOptions = if (mention != null) Mentions.matches(members, mention.query, meId) else emptyList()
     Column(Modifier.widthIn(max = 880.dp).fillMaxWidth()) {
+    if (mention != null && mentionOptions.isNotEmpty()) {
+        Surface(
+            shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceContainer, shadowElevation = 3.dp,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+        ) {
+            Column(Modifier.heightIn(max = 240.dp).verticalScroll(rememberScrollState()).padding(vertical = 4.dp)) {
+                for (person in mentionOptions) Row(
+                    Modifier.fillMaxWidth().clickable {
+                        val (t, cursor) = Mentions.insert(tfv.text, mention, tfv.selection.start, person)
+                        tfv = androidx.compose.ui.text.input.TextFieldValue(t, androidx.compose.ui.text.TextRange(cursor))
+                        onText(t)
+                    }.padding(horizontal = 14.dp, vertical = 6.dp).heightIn(min = 44.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    org.hearth.ember.ui.components.UserAvatar(person, 32.dp)
+                    Spacer(Modifier.width(12.dp))
+                    Text(person.displayName.ifBlank { person.username }, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    Text("@" + person.username, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+    }
     if (target != null) {
         val word = wordOf(target)
         val position = errors.indexOf(target) + 1
@@ -821,7 +848,7 @@ private fun ForwardSheet(message: Message, onDismiss: () -> Unit, onPick: (Strin
 }
 
 /** Download an attachment and hand it to whatever app opens it. */
-private suspend fun openFile(context: Context, a: Attachment, fail: (String) -> Unit) {
+internal suspend fun openFile(context: Context, a: Attachment, fail: (String) -> Unit) {
     val app = context.ember
     runCatching {
         val bytes = app.api.downloadAttachment(a.id)

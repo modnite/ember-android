@@ -209,6 +209,10 @@ class Api(private val store: SessionStore, val client: OkHttpClient) {
     suspend fun messages(roomId: String, before: Long? = null): List<Message> =
         get<MessagesResponse>("/api/rooms/$roomId/messages" + (before?.let { "?before=$it" } ?: "")).messages
 
+    /** Everything shared in a room, newest first, a page at a time. */
+    suspend fun roomMedia(roomId: String, before: Long? = null): List<RoomMediaItem> =
+        get<RoomMediaResponse>("/api/rooms/$roomId/media" + (before?.let { "?before=$it" } ?: "")).media
+
     suspend fun sendMessage(roomId: String, body: String, replyTo: String? = null): Message =
         post<MessageResponse>(
             "/api/rooms/$roomId/messages",

@@ -28,6 +28,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.PersonRemove
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.AlertDialog
@@ -131,6 +132,14 @@ fun RoomDetailsScreen(nav: NavHostController, roomId: String) {
                             Text("End-to-end encrypted", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                         }
                     }
+                }
+                HorizontalDivider()
+                Row(
+                    Modifier.fillMaxWidth().clickable { nav.navigate("media/$roomId") }.padding(horizontal = 20.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Filled.PhotoLibrary, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Shared pictures, files and voice", Modifier.padding(start = 20.dp), style = MaterialTheme.typography.bodyLarge)
                 }
                 HorizontalDivider()
                 Text(

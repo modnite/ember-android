@@ -2,6 +2,11 @@
 
 One entry per release. All dates are 2026.
 
+## 1.3.0 (1 Nov)
+- Mentions: typing @ in a group lists its members above the message box, narrows as you type, and puts in the name when you pick one. An @ inside an email address does not open the list. A name after @ in a message is highlighted, and yours stands out more. The web app does the same.
+- Shared pictures, files and voice: Chat details have a new row that opens everything shared in the chat, newest first. Pictures and videos in a grid by month, files and voice messages in a list, older ones on request.
+- The sign-in screen shows the Ember speech bubble and flame on its own in the accent colour, no circle around it.
+
 ## 1.2.0 (31 Oct)
 - Spacing matches the web app: section headings, settings rows, people rows and the archived row use the same sizes in both.
 - This release rolls up the interface round: the new wallpaper model, regrouped settings and the sideways fixes from 1.1.7. From here the last number is for small fixes and the middle number for features, improvements and major fixes.

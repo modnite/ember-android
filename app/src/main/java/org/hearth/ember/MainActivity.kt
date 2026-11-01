@@ -301,6 +301,7 @@ private fun EmberNav(nav: NavHostController) {
                 } else ChatScreen(nav, id)
             }
         }
+        composable("media/{roomId}") { entry -> org.hearth.ember.ui.chat.SharedMediaScreen(nav, entry.arguments?.getString("roomId") ?: "") }
         composable("room/{roomId}") { entry -> org.hearth.ember.ui.chat.RoomDetailsScreen(nav, entry.arguments?.getString("roomId") ?: "") }
         composable("settings/{page}") { entry -> org.hearth.ember.ui.settings.SettingsPage(nav, entry.arguments?.getString("page") ?: "") }
         composable("share") { org.hearth.ember.ui.chat.ShareScreen(nav) }

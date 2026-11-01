@@ -60,6 +60,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
@@ -248,7 +249,7 @@ fun MessageBubble(
                                     Text(if (app.e2ee.ready) "Encrypted message (older format)" else "Encrypted message", fontStyle = androidx.compose.ui.text.font.FontStyle.Italic, color = textColor.copy(alpha = 0.7f))
                                 }
                             } else if (!plain.isNullOrBlank()) {
-                                Box(inset.padding(top = if (kind.hasMedia) 2.dp else 0.dp)) { LinkedText(plain, textColor) }
+                                Box(inset.padding(top = if (kind.hasMedia) 2.dp else 0.dp)) { LinkedText(plain, textColor, if (room.isDm) emptyList() else room.members, meId) }
                                 if (!room.encrypted) firstUrl(plain)?.let { LinkPreviewCard(it) }
                             }
                         }
@@ -333,19 +334,28 @@ private fun Ticks(message: Message, room: Room, meId: String, onDark: Boolean = 
 }
 
 @Composable
-private fun LinkedText(text: String, color: Color) {
+private fun LinkedText(text: String, color: Color, members: List<org.hearth.ember.data.User>, meId: String) {
     val linkColor = MaterialTheme.colorScheme.primary
+    val mentionBackground = MaterialTheme.colorScheme.primaryContainer
     // Real links: only a touch on the link itself is taken (and opens it); a tap anywhere else on the words goes on to the message.
-    val annotated = remember(text, linkColor) {
+    val annotated = remember(text, linkColor, members, meId) {
         androidx.compose.ui.text.buildAnnotatedString {
+            // Words that are not links: a member named after @ is highlighted, and yours stands out more.
+            fun plain(part: String) {
+                for (piece in Mentions.split(part, members)) {
+                    val person = piece.person
+                    if (person == null) append(piece.text)
+                    else withStyle(SpanStyle(color = linkColor, fontWeight = FontWeight.SemiBold, background = if (person.id == meId) mentionBackground else Color.Unspecified)) { append(piece.text) }
+                }
+            }
             var last = 0
             for (match in UrlPattern.findAll(text)) {
-                append(text.substring(last, match.range.first))
+                plain(text.substring(last, match.range.first))
                 val url = if (match.value.contains("://")) match.value else "https://" + match.value
                 withLink(androidx.compose.ui.text.LinkAnnotation.Url(url, androidx.compose.ui.text.TextLinkStyles(SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline)))) { append(match.value) }
                 last = match.range.last + 1
             }
-            append(text.substring(last))
+            plain(text.substring(last))
         }
     }
     Text(text = annotated, style = MaterialTheme.typography.bodyLarge.copy(color = color))
@@ -513,7 +523,7 @@ private fun ReactionRow(message: Message, meId: String, onReact: (String) -> Uni
 
 /** A picture from an encrypted chat: fetched as ciphertext, opened here with the group key, never stored decrypted on the server. */
 @Composable
-private fun EncryptedImage(a: Attachment, roomId: String, onOpen: (Attachment) -> Unit, overlay: (@Composable BoxScope.() -> Unit)?) {
+internal fun EncryptedImage(a: Attachment, roomId: String, onOpen: (Attachment) -> Unit, overlay: (@Composable BoxScope.() -> Unit)?) {
     val app = LocalContext.current.ember
     val revision by app.e2ee.revision.collectAsState()
     val bitmap by produceState<android.graphics.Bitmap?>(null, a.id, revision) {

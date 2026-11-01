@@ -116,12 +116,8 @@ fun LoginScreen() {
             val compact = WindowInsets.isImeVisible || LocalConfiguration.current.screenHeightDp < 520
             Spacer(Modifier.height(if (compact) 8.dp else 32.dp))
             if (!compact) {
-                Box(
-                    Modifier.size(84.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(androidx.compose.ui.res.painterResource(org.hearth.ember.R.drawable.ic_stat_ember), null, tint = Color.White, modifier = Modifier.size(48.dp))
-                }
+                // The speech bubble with its flame, on its own in the accent colour.
+                Icon(androidx.compose.ui.res.painterResource(org.hearth.ember.R.drawable.ic_stat_ember), null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(96.dp))
                 Spacer(Modifier.height(20.dp))
             }
             Text("Ember", style = if (compact) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)

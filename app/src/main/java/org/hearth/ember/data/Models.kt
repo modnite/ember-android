@@ -131,6 +131,27 @@ data class AddMembersResponse(val room: Room, val added: List<String> = emptyLis
 @Serializable
 data class MessagesResponse(val messages: List<Message> = emptyList())
 
+/** One thing shared in a room, from the room's media list. */
+@Serializable
+data class RoomMediaItem(
+    val id: String,
+    val filename: String = "",
+    val mime: String = "",
+    val size: Long = 0,
+    val width: Int? = null,
+    val height: Int? = null,
+    val encrypted: Int = 0,
+    val envelope: String = "",
+    val createdAt: Long = 0,
+    val messageId: String = "",
+    val userId: String = "",
+) {
+    val attachment get() = Attachment(id, filename, mime, size, width, height, encrypted, envelope)
+}
+
+@Serializable
+data class RoomMediaResponse(val media: List<RoomMediaItem> = emptyList())
+
 @Serializable
 data class MessageResponse(val message: Message)
 
