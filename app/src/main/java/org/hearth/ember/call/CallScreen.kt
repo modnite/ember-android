@@ -197,6 +197,10 @@ val LocalCallControls = androidx.compose.runtime.compositionLocalOf { true }
 fun VideoView(room: Room?, track: VideoTrack?, modifier: Modifier = Modifier, mirror: Boolean = false, fill: Boolean = true, onRatio: ((Float) -> Unit)? = null) {
     if (room == null) return
     val renderer = remember { arrayOfNulls<TextureViewRenderer>(1) }
+    // What the view was last given. Setting the scaling type or the mirror asks the view for a new layout every time, even when nothing
+    // changed, and this function runs again whenever the call's state moves, so setting them blindly made every tile re-lay itself out all
+    // the time. They are only set when they differ.
+    val applied = remember { arrayOf<Any?>(null, null) }
     val ratioCallback by androidx.compose.runtime.rememberUpdatedState(onRatio)
     AndroidView(
         modifier = modifier,
@@ -207,10 +211,13 @@ fun VideoView(room: Room?, track: VideoTrack?, modifier: Modifier = Modifier, mi
             }
         },
         update = {
-            it.setMirror(mirror)
+            if (applied[0] != mirror) { it.setMirror(mirror); applied[0] = mirror }
             // Fill crops the picture to the window; fit shows all of it with bars. A landscape picture in a portrait window is best fitted.
-            val type = if (fill) RendererCommon.ScalingType.SCALE_ASPECT_FILL else RendererCommon.ScalingType.SCALE_ASPECT_FIT
-            it.setScalingType(type, type)
+            if (applied[1] != fill) {
+                val type = if (fill) RendererCommon.ScalingType.SCALE_ASPECT_FILL else RendererCommon.ScalingType.SCALE_ASPECT_FIT
+                it.setScalingType(type, type)
+                applied[1] = fill
+            }
         },
     )
     DisposableEffect(track, room) {
@@ -447,7 +454,7 @@ private fun InCall(controller: CallController, state: CallState, pip: Boolean, o
                         if (state.camOn && state.lenses.size > 1) { LensColumn(state, controller); Spacer(Modifier.width(10.dp)) }
                         Column(
                             Modifier.clip(RoundedCornerShape(28.dp)).background(Color.Black.copy(alpha = 0.45f)).padding(6.dp),
-                            verticalArrangement = Arrangement.spacedBy(5.dp), horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(7.dp), horizontalAlignment = Alignment.CenterHorizontally,
                         ) { buttons() }
                     }
                 }
@@ -676,20 +683,30 @@ private fun PersonTile(controller: CallController, p: CallPerson, modifier: Modi
                 Icon(Icons.Filled.VolumeOff, null, tint = Color(0xFFFFCC80), modifier = Modifier.size(if (big) 16.dp else 12.dp))
                 if (big) Text(" You muted them", color = Color.White, style = MaterialTheme.typography.labelMedium)
             }
-            if (fitShown) Box(
-                Modifier.size(36.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.55f)).clickable { controller.toggleFit() },
-                contentAlignment = Alignment.Center,
-            ) { Icon(if (fit) Icons.Filled.Fullscreen else Icons.Filled.FitScreen, if (fit) "Fill the window" else "Fit the whole picture", tint = Color.White, modifier = Modifier.size(20.dp)) }
+            // The circle is 36dp; the part that answers a touch is 48dp, so it does not have to be hit exactly. It acts on what is shown right now.
+            if (fitShown) Box(Modifier.size(48.dp).clickable(onClickLabel = if (fit) "Fill the window" else "Fit the whole picture") { controller.setFit(!fit) }, contentAlignment = Alignment.Center) {
+                Box(Modifier.size(36.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.55f)), contentAlignment = Alignment.Center) {
+                    Icon(if (fit) Icons.Filled.Fullscreen else Icons.Filled.FitScreen, if (fit) "Fill the window" else "Fit the whole picture", tint = Color.White, modifier = Modifier.size(20.dp))
+                }
+            }
         }
         if (buttonShown && !big) Box(
             Modifier.align(Alignment.TopEnd).padding(6.dp).size(30.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.55f)).clickable { controller.toggleMuteFor(p.identity) },
             contentAlignment = Alignment.Center,
         ) { Icon(if (p.mutedByMe) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp, if (p.mutedByMe) "Hear ${p.name} again" else "Mute ${p.name} for me", tint = Color.White, modifier = Modifier.size(16.dp)) }
         // Flipping the camera lives on your own picture, as in Element Call, so the control bar stays uncrowded.
-        val st = controller.state.collectAsState().value
-        if (p.isLocal && p.camOn && st.lenses.size > 1) {
+        // Only whether there is a second camera matters here, so the tile is not redrawn every time the call's state moves.
+        val callState = controller.state.collectAsState()
+        val canFlip by remember { androidx.compose.runtime.derivedStateOf { callState.value.lenses.size > 1 } }
+        if (p.isLocal && p.camOn && canFlip) {
             Box(
-                Modifier.align(Alignment.BottomEnd).padding(if (big) 14.dp else 6.dp).size(if (big) 44.dp else 32.dp).clip(CircleShape)
+                // Sideways the call buttons stand in a column at the right edge; on the big picture the flip button sits just left of it, not touching it.
+                Modifier.align(Alignment.BottomEnd)
+                    .padding(
+                        start = if (big) 14.dp else 6.dp, top = if (big) 14.dp else 6.dp, bottom = if (big) 14.dp else 6.dp,
+                        end = if (big && androidx.compose.ui.platform.LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) 104.dp else if (big) 14.dp else 6.dp,
+                    )
+                    .size(if (big) 44.dp else 32.dp).clip(CircleShape)
                     .background(Color.Black.copy(alpha = 0.45f)).clickable { controller.flipCamera() },
                 contentAlignment = Alignment.Center,
             ) { Icon(Icons.Filled.Cameraswitch, "Flip camera", tint = Color.White, modifier = Modifier.size(if (big) 24.dp else 18.dp)) }
@@ -815,7 +832,9 @@ private fun RoundButton(icon: ImageVector, label: String, off: Boolean = false, 
         else -> Color.White
     }
     Box(
-        Modifier.size(if (small) (if (danger) 44.dp else 38.dp) else if (danger) 58.dp else 52.dp).clip(CircleShape).background(bg).clickable(onClick = onClick),
+        // Sideways the buttons stand in a column with little height to spare: 40dp, 7dp apart, a touch target of 47dp each (they were 38dp and 5dp
+    // apart, and easy to miss).
+    Modifier.size(if (small) (if (danger) 44.dp else 40.dp) else if (danger) 58.dp else 52.dp).clip(CircleShape).background(bg).clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
-    ) { Icon(icon, label, tint = fg, modifier = Modifier.size(if (small) 20.dp else 26.dp)) }
+    ) { Icon(icon, label, tint = fg, modifier = Modifier.size(if (small) 22.dp else 26.dp)) }
 }

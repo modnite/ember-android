@@ -37,18 +37,31 @@ class CallService : Service() {
             this, 11, Intent(this, NotificationActionReceiver::class.java).setAction(CallController.ACTION_HANGUP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val notification = NotificationCompat.Builder(this, Notifier.CHANNEL_ONGOING)
+        val mute = PendingIntent.getBroadcast(
+            this, 12, Intent(this, NotificationActionReceiver::class.java).setAction(CallController.ACTION_MUTE),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val title = state.title.ifBlank { "Call" }
+        val builder = NotificationCompat.Builder(this, Notifier.CHANNEL_ONGOING)
             .setSmallIcon(R.drawable.ic_stat_ember)
-            .setContentTitle(state.title.ifBlank { "Call" })
+            .setContentTitle(title)
             .setContentText("Ongoing call")
             .setOngoing(true)
             .setUsesChronometer(true)
             .setWhen(if (state.startedAt > 0) state.startedAt else System.currentTimeMillis())
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setContentIntent(open)
-            .addAction(0, "Hang up", hangup)
             .setColor(0xFFE8590C.toInt())
-            .build()
+        // The standard call notification: tap it to return to the call, End call and Mute (or Unmute, as the microphone is) on it. From Android 12 it
+        // is drawn in the system's call style, with the green call chip in the status bar; before that the same buttons sit under the text.
+        val muteLabel = if (state.micOn) "Mute" else "Unmute"
+        if (android.os.Build.VERSION.SDK_INT >= 31) {
+            val person = androidx.core.app.Person.Builder().setName(title).setImportant(true).build()
+            builder.setStyle(NotificationCompat.CallStyle.forOngoingCall(person, hangup)).addAction(0, muteLabel, mute)
+        } else {
+            builder.addAction(0, muteLabel, mute).addAction(0, "End call", hangup)
+        }
+        val notification = builder.build()
         var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
         if (state.camOn) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
         // Sharing the screen needs its own service type, declared before the capture starts.

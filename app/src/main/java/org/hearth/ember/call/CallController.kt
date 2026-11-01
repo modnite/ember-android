@@ -188,6 +188,8 @@ class CallController(private val app: EmberApp) {
     /** What is on screen right now, so the button can say what a press will do. */
     val shownFit = MutableStateFlow(false)
     fun toggleFit() { fitMode.value = !shownFit.value }
+    /** Set it from what a tile is showing right now, so a quick second press never acts on a value that has not caught up yet. */
+    fun setFit(fit: Boolean) { fitMode.value = fit }
     private val frameRatios = java.util.concurrent.ConcurrentHashMap<String, Float>()
     @Volatile private var pipIdentity: String? = null
 
@@ -308,6 +310,8 @@ class CallController(private val app: EmberApp) {
         val on = !_state.value.micOn
         _state.update { it.copy(micOn = on) }
         if (_state.value.phase == Phase.Connected) app.scope.launch { runCatching { room?.localParticipant?.setMicrophoneEnabled(on) }; push() }
+        // The call notification says Mute or Unmute to match.
+        if (_state.value.phase == Phase.Connected || _state.value.phase == Phase.Connecting) CallService.start(app)
     }
 
     fun toggleCamera() {

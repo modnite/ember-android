@@ -385,7 +385,7 @@ private fun ChatsPage() {
     val softwareEcho by app.prefs.softwareEcho.collectAsState()
             ToggleRow(
                 Icons.Filled.Hearing, "Extra echo cancelling",
-                "On if the other person hears themselves back. Applies from the next call.",
+                if (app.prefs.softwareEchoByDefault) "Switched on for this phone, whose own does badly. Applies from the next call." else "On if the other person hears themselves back. Applies from the next call.",
                 softwareEcho,
             ) { app.prefs.setSoftwareEcho(it) }
 }

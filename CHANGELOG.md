@@ -2,6 +2,12 @@
 
 One entry per release. All dates are 2026.
 
+## 1.4.0 (1 Nov)
+- The ongoing call notification is the standard call notification: tap it to return to the call, End call and Mute (it says Unmute while you are muted) on it. From Android 12 it is drawn in the system call style.
+- Echo cancelling is on from the start on the Pixel 3 family (Pixel 3, 3 XL, 3a, 3a XL), whose own echo cancelling does badly on speakerphone: the other person on the call heard themselves. Settings, Extra echo cancelling can still switch it either way.
+- Calls sideways: the buttons at the right edge are bigger (40dp, up from 38dp) and further apart, so they are not missed. The camera flip button on a big picture sits clear of them.
+- Fit and fill: the button on a big picture has a 48dp touch area, acts on what is shown at that moment (so a quick second press is never ignored) and no longer makes every call tile lay itself out again each time the call state changes.
+
 ## 1.3.0 (1 Nov)
 - Mentions: typing @ in a group lists its members above the message box, narrows as you type, and puts in the name when you pick one. An @ inside an email address does not open the list. A name after @ in a message is highlighted, and yours stands out more. The web app does the same.
 - Shared pictures, files and voice: Chat details have a new row that opens everything shared in the chat, newest first. Pictures and videos in a grid by month, files and voice messages in a list, older ones on request.

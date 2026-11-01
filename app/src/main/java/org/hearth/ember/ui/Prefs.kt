@@ -1,5 +1,6 @@
 package org.hearth.ember.ui
 
+import android.os.Build
 import org.hearth.ember.ui.chat.Wallpapers
 
 import android.content.Context
@@ -136,10 +137,13 @@ class Prefs(context: Context) {
     fun setNudgeButton(on: Boolean) { p.edit().putBoolean("nudgeButton", on).apply(); _nudgeButton.value = on }
 
     /**
-     * Echo cancelling in calls. Off (the default): the phone's own canceller and noise suppressor, as calls always used. On: WebRTC's software ones, which
+     * Echo cancelling in calls. Off: the phone's own canceller and noise suppressor, as calls always used. On: WebRTC's software ones, which
      * suit a phone whose own does badly on speakerphone (the other person hears themselves). Read when a call starts.
+     * On from the start for the phones known to need it (the Pixel 3 family: a friend's Pixel 3 gave everyone on the call an echo of themselves);
+     * a choice made in Settings always wins.
      */
-    private val _softwareEcho = MutableStateFlow(p.getBoolean("softwareEcho", false))
+    val softwareEchoByDefault: Boolean = Build.MODEL.lowercase().let { it == "pixel 3" || it == "pixel 3 xl" || it == "pixel 3a" || it == "pixel 3a xl" }
+    private val _softwareEcho = MutableStateFlow(p.getBoolean("softwareEcho", softwareEchoByDefault))
     val softwareEcho: StateFlow<Boolean> = _softwareEcho.asStateFlow()
     fun setSoftwareEcho(on: Boolean) { p.edit().putBoolean("softwareEcho", on).apply(); _softwareEcho.value = on }
 
