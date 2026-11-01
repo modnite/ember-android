@@ -2,6 +2,9 @@
 
 One entry per release. All dates are 2026.
 
+## 1.4.2 (1 Nov)
+- The call notification no longer sets its own accent colour. In One UI dark mode the Mute button text took that colour and could not be read; the buttons now use the system's own text colour in light and dark.
+
 ## 1.4.1 (1 Nov)
 - Group calls: the fit/fill button now follows what the tiles show. Before, with pictures fitting by themselves the first press changed nothing visible, and a quick second press acted on a stale value, so it felt fiddly. It now flips what you see at once, every press.
 

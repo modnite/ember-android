@@ -51,7 +51,6 @@ class CallService : Service() {
             .setWhen(if (state.startedAt > 0) state.startedAt else System.currentTimeMillis())
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setContentIntent(open)
-            .setColor(0xFFE8590C.toInt())
         // The standard call notification: tap it to return to the call, End call and Mute (or Unmute, as the microphone is) on it. From Android 12 it
         // is drawn in the system's call style, with the green call chip in the status bar; before that the same buttons sit under the text.
         val muteLabel = if (state.micOn) "Mute" else "Unmute"
