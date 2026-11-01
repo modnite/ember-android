@@ -78,6 +78,7 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -490,18 +491,23 @@ private fun InCall(controller: CallController, state: CallState, pip: Boolean, o
 @Composable
 private fun BatteryBanner(state: CallState, modifier: Modifier = Modifier) {
     var dismissed by remember(state.lowBattery) { mutableStateOf(false) }
+    // Other people's warnings fade by themselves after a few seconds and can be cleared at once; a lower reading from them brings the warning back.
+    var hidden by remember { mutableStateOf(setOf<String>()) }
     val lines = buildList {
-        state.lowBattery?.takeIf { !dismissed }?.let { add("Your battery is at $it%. Plug in now and use a fast charger." to true) }
-        state.peerBattery.values.forEach { add("${it.name}'s battery is at ${it.level}%." to false) }
+        state.lowBattery?.takeIf { !dismissed }?.let { add(Triple("Your battery is at $it%. Plug in now and use a fast charger.", true, "")) }
+        state.peerBattery.forEach { (id, p) -> add(Triple("${p.name}'s battery is at ${p.level}%.", false, "$id@${p.level}")) }
     }
     if (lines.isEmpty()) return
     Column(modifier.statusBarsPadding().padding(top = 92.dp, start = 12.dp, end = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        for ((text, own) in lines) {
-            Surface(color = Color(0xE6241C18), shape = RoundedCornerShape(12.dp)) {
-                Row(Modifier.padding(start = 12.dp, top = 6.dp, bottom = 6.dp, end = if (own) 2.dp else 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        for ((text, own, key) in lines) {
+            if (!own) androidx.compose.runtime.LaunchedEffect(key) { delay(12_000); hidden = hidden + key }
+            val alpha by androidx.compose.animation.core.animateFloatAsState(if (!own && key in hidden) 0f else 1f, androidx.compose.animation.core.tween(600), label = "battery")
+            if (alpha <= 0f) continue
+            Surface(color = Color(0xE6241C18), shape = RoundedCornerShape(12.dp), modifier = Modifier.graphicsLayer { this.alpha = alpha }) {
+                Row(Modifier.padding(start = 12.dp, top = 6.dp, bottom = 6.dp, end = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Icon(Icons.Filled.BatteryAlert, null, tint = Color(0xFFFFB27A), modifier = Modifier.size(20.dp))
                     Text(text, color = Color.White, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f, fill = false))
-                    if (own) IconButton(onClick = { dismissed = true }) { Icon(Icons.Filled.Close, "Dismiss", tint = Color.White) }
+                    IconButton(onClick = { if (own) dismissed = true else hidden = hidden + key }) { Icon(Icons.Filled.Close, "Dismiss", tint = Color.White) }
                 }
             }
         }

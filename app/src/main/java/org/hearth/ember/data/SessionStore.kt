@@ -36,6 +36,11 @@ class SessionStore(context: Context) {
         get() = prefs.getString("server", "") ?: ""
         set(v) = prefs.edit().putString("server", normalize(v)).apply()
 
+    /** The servers of the group this one belongs to (main server first), one address per line, as the server last said. */
+    var group: String
+        get() = prefs.getString("group", "") ?: ""
+        set(v) = prefs.edit().putString("group", v).apply()
+
     var userId: String
         get() = prefs.getString("userId", "") ?: ""
         set(v) = prefs.edit().putString("userId", v).apply()
@@ -83,7 +88,7 @@ class SessionStore(context: Context) {
     fun signOut() {
         val id = deviceId
         val secret = e2eeSecret
-        prefs.edit().clear().putString("deviceId", id).putString("server", server).putString("e2eeSecret", secret).apply()
+        prefs.edit().clear().putString("deviceId", id).putString("server", group.lines().firstOrNull { it.isNotBlank() } ?: server).putString("e2eeSecret", secret).apply()
     }
 
     companion object {

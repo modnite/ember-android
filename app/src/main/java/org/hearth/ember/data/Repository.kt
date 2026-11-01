@@ -97,6 +97,13 @@ class Repository(
 
     private fun flowFor(roomId: String) = synchronized(messageFlows) { messageFlows.getOrPut(roomId) { MutableStateFlow(emptyList()) } }
 
+    /** Moves to a mirror when the server stops answering, and back when the main server is serving again. */
+    private val failover = Failover(store, client, scope) {
+        realtime.stop()
+        realtime.start()
+        refreshAll()
+    }
+
     init {
         scope.launch { realtime.frames.collect { runCatching { handle(it) } } }
         if (store.signedIn) {
@@ -138,6 +145,7 @@ class Repository(
     private suspend fun start() {
         _signedIn.value = true
         realtime.start()
+        failover.start()
         refreshAll()
     }
 
@@ -168,6 +176,7 @@ class Repository(
     }
 
     private fun signedOut() {
+        failover.stop()
         realtime.stop()
         e2ee.clear()
         store.signOut()

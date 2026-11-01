@@ -2,6 +2,10 @@
 
 One entry per release. All dates are 2026.
 
+## 1.5.0 (1 Nov)
+- Servers with mirrors: when the server stops answering the app moves to the mirror that has taken over, keeps you signed in, and moves back by itself when the main server is serving again. Nothing to set up; the server tells the app about its mirrors.
+- A low battery warning from someone else in a call fades after a few seconds and has a close button, like your own does.
+
 ## 1.4.2 (1 Nov)
 - The call notification no longer sets its own accent colour. In One UI dark mode the Mute button text took that colour and could not be read; the buttons now use the system's own text colour in light and dark.
 
