@@ -2,6 +2,9 @@
 
 One entry per release. All dates are 2026.
 
+## 1.6.0 (1 Nov)
+- About Ember (Settings, About): this app's version, the server's name and version, the update check, and links to the source of the Android app, the desktop app and the server.
+
 ## 1.5.1 (1 Nov)
 - The Mute button of the call notification: on Samsung's dark theme the button is a white pill and its label was white too. In dark mode the label is now dark. Seen on a Galaxy S23; not yet confirmed after this change.
 

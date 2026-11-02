@@ -139,7 +139,7 @@ fun SettingsTab(nav: NavHostController) {
                 ActionRow(Icons.Filled.Lock, "Two-step sign-in", "A code from an authenticator app") { nav.navigate("settings/twostep") }
                 ActionRow(Icons.Filled.Backup, "Backup and encryption", "Automatic backups, restore, your key") { nav.navigate("settings/backup") }
                 SectionLabel("About")
-                UpdateRow()
+                ActionRow(Icons.Filled.Info, "About Ember", "Version ${org.hearth.ember.BuildConfig.VERSION_NAME}, the server, updates, source code") { nav.navigate("settings/about") }
                 val crashReports by app.prefs.crashReports.collectAsState()
                 ToggleRow(Icons.Filled.BugReport, "Send crash reports", "To your Hearth server, so a fix can be made", crashReports) { on -> app.prefs.setCrashReports(on) }
                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
@@ -162,7 +162,7 @@ fun SettingsTab(nav: NavHostController) {
                 ActionRow(Icons.Filled.Lock, "Two-step sign-in", "A code from an authenticator app") { nav.navigate("settings/twostep") }
                 ActionRow(Icons.Filled.Backup, "Backup and encryption", "Automatic backups, restore, your key") { nav.navigate("settings/backup") }
                 SectionLabel("About")
-                UpdateRow()
+                ActionRow(Icons.Filled.Info, "About Ember", "Version ${org.hearth.ember.BuildConfig.VERSION_NAME}, the server, updates, source code") { nav.navigate("settings/about") }
                 val crashReports by app.prefs.crashReports.collectAsState()
                 ToggleRow(Icons.Filled.BugReport, "Send crash reports", "To your Hearth server, so a fix can be made", crashReports) { on -> app.prefs.setCrashReports(on) }
                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
@@ -205,6 +205,7 @@ fun SettingsPage(nav: NavHostController, page: String) {
         "twostep" -> "Two-step sign-in"
         "account" -> "Username and password"
         "online" -> "GIFs and stickers"
+        "about" -> "About Ember"
         else -> "Settings"
     }
     Column(Modifier.fillMaxSize()) {
@@ -223,6 +224,7 @@ fun SettingsPage(nav: NavHostController, page: String) {
                 "twostep" -> TwoStepRows()
                 "account" -> AccountRows()
                 "online" -> OnlineRows()
+                "about" -> AboutRows()
             }
             Spacer(Modifier.height(32.dp))
         }

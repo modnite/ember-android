@@ -96,6 +96,9 @@ class Api(private val store: SessionStore, val client: OkHttpClient) {
     // ------------------------------------------------------------------ account
     suspend fun me(): User = get<UserResponse>("/api/auth/me").user
 
+    /** What the server says about itself (its name and version), before and after sign-in. */
+    suspend fun serverInfo(): ServerInfo = get("/api/server/info")
+
     /** The key that seals this account's backups (the server makes it the first time it is asked for). */
     suspend fun backupKey(): BackupKeyResponse = get("/api/backup/key")
 

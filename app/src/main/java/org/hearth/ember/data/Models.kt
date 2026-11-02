@@ -229,6 +229,9 @@ data class ActiveCall(
 )
 
 @Serializable
+data class ServerInfo(val name: String? = null, val version: String? = null, val software: String? = null)
+
+@Serializable
 data class AuthConfig(val registration: String = "invite", val twoStep: Boolean = false)
 
 @Serializable
