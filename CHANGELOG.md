@@ -2,6 +2,10 @@
 
 One entry per release. All dates are 2026.
 
+## 1.7.1 (2 Nov)
+- Settings sit in two columns only when the settings page itself is wide, not whenever the phone is on its side. Beside a chat (a tablet, a foldable or a freeform window) the page is narrow and two columns made every row wrap a word to a line; it is now one column there.
+- The backup notification shows real progress: a bar that fills and a percentage when a step is counting ("Reading Kitchen (3 of 12)"), and the whole step text instead of one cut-off line. The strip in the app and the backup page show the same bar. Steps with no count keep the moving bar.
+
 ## 1.7.0 (2 Nov)
 - Share screen asks how to send it first: Gaming (60 frames a second), Everyday (30) or Sharp text (15). The choice is remembered and sets the frame rate and bitrate of the share. Gaming is the old fixed setting; the others use less of the network.
 - The About page links to the web app's repository, now public.
