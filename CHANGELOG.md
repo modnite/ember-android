@@ -2,6 +2,9 @@
 
 One entry per release. All dates are 2026.
 
+## 1.5.1 (1 Nov)
+- The Mute button of the call notification: on Samsung's dark theme the button is a white pill and its label was white too. In dark mode the label is now dark. Seen on a Galaxy S23; not yet confirmed after this change.
+
 ## 1.5.0 (1 Nov)
 - Servers with mirrors: when the server stops answering the app moves to the mirror that has taken over, keeps you signed in, and moves back by itself when the main server is serving again. Nothing to set up; the server tells the app about its mirrors.
 - A low battery warning from someone else in a call fades after a few seconds and has a close button, like your own does.

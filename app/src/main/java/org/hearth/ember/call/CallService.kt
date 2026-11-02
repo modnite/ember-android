@@ -53,12 +53,19 @@ class CallService : Service() {
             .setContentIntent(open)
         // The standard call notification: tap it to return to the call, End call and Mute (or Unmute, as the microphone is) on it. From Android 12 it
         // is drawn in the system's call style, with the green call chip in the status bar; before that the same buttons sit under the text.
-        val muteLabel = if (state.micOn) "Mute" else "Unmute"
+        // In the dark theme Samsung draws the Mute button as a white pill and writes its label in white, so it cannot be read (seen on a Galaxy S23).
+        // In dark mode the label is made dark. The system follows its own light or dark setting here, not this app's theme. Stock Android ignores the
+        // colour and draws a readable label already; in light mode nothing is changed.
+        val dark = (android.content.res.Resources.getSystem().configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
+        fun label(text: String): CharSequence = if (!dark) text else android.text.SpannableString(text).apply {
+            setSpan(android.text.style.ForegroundColorSpan(0xFF1B1411.toInt()), 0, length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+        val muteLabel = label(if (state.micOn) "Mute" else "Unmute")
         if (android.os.Build.VERSION.SDK_INT >= 31) {
             val person = androidx.core.app.Person.Builder().setName(title).setImportant(true).build()
             builder.setStyle(NotificationCompat.CallStyle.forOngoingCall(person, hangup)).addAction(0, muteLabel, mute)
         } else {
-            builder.addAction(0, muteLabel, mute).addAction(0, "End call", hangup)
+            builder.addAction(0, muteLabel, mute).addAction(0, label("End call"), hangup)
         }
         val notification = builder.build()
         var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
