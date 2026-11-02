@@ -343,9 +343,27 @@ class CallController(private val app: EmberApp) {
         private set
     private var sharingStarting = false
 
+    /** How a shared screen is sent: Gaming keeps the frame rate up, Sharp text keeps the picture sharp. The last choice is remembered. */
+    enum class ShareQuality(val label: String, val note: String, val fps: Int, val bitrate: Long) {
+        Gaming("Gaming", "60 frames a second", 60, 9_000_000),
+        Everyday("Everyday", "30 frames a second", 30, 4_500_000),
+        Sharp("Sharp text", "15 frames a second", 15, 3_500_000),
+    }
+
+    var shareQuality: ShareQuality
+        get() = ShareQuality.entries.firstOrNull { it.name == viewPrefs.getString("shareQuality", null) } ?: ShareQuality.Everyday
+        set(v) { viewPrefs.edit().putString("shareQuality", v.name).apply() }
+
     /** [permission] is what the system's "start recording or casting" dialog returned. */
     fun startScreen(permission: android.content.Intent) {
         if (_state.value.phase != Phase.Connected) return
+        val q = shareQuality
+        room?.localParticipant?.let { lp ->
+            lp.screenShareTrackCaptureDefaults = LocalVideoTrackOptions(isScreencast = true, captureParams = VideoCaptureParameter(1920, 1080, q.fps))
+            lp.screenShareTrackPublishDefaults = io.livekit.android.room.participant.VideoTrackPublishDefaults(
+                videoEncoding = io.livekit.android.room.track.VideoEncoding(q.bitrate.toInt(), q.fps), simulcast = false,
+            )
+        }
         projectionWanted = true
         sharingStarting = true
         CallService.start(app)

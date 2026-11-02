@@ -372,6 +372,8 @@ private fun InCall(controller: CallController, state: CallState, pip: Boolean, o
         if (r.resultCode == Activity.RESULT_OK && data != null) controller.startScreen(data)
     }
     val sharer = others.firstOrNull { it.screen != null }
+    var shareChoice by remember { mutableStateOf(false) }
+    if (shareChoice) ShareQualityDialog(controller, onShare = { shareChoice = false; shareLauncher.launch(context.getSystemService(android.media.projection.MediaProjectionManager::class.java).createScreenCaptureIntent()) }, onCancel = { shareChoice = false })
 
     // Hide the controls a few seconds after the last touch while there is video, as WhatsApp does.
     LaunchedEffect(controls, state.people.any { it.camOn }) {
@@ -437,10 +439,7 @@ private fun InCall(controller: CallController, state: CallState, pip: Boolean, o
                     on = state.screenOn, small = landscape,
                 ) {
                     if (state.screenOn) controller.stopScreen()
-                    else {
-                        val manager = context.getSystemService(android.media.projection.MediaProjectionManager::class.java)
-                        shareLauncher.launch(manager.createScreenCaptureIntent())
-                    }
+                    else shareChoice = true
                 }
                 RoundButton(if (state.micOn) Icons.Filled.Mic else Icons.Filled.MicOff, if (state.micOn) "Mute" else "Unmute", off = !state.micOn, small = landscape) { controller.toggleMic() }
                 RoundButton(Icons.Filled.CallEnd, "End call", danger = true, small = landscape) { controller.hangup(); onMinimize() }
@@ -844,4 +843,29 @@ private fun RoundButton(icon: ImageVector, label: String, off: Boolean = false, 
     Modifier.size(if (small) (if (danger) 44.dp else 40.dp) else if (danger) 58.dp else 52.dp).clip(CircleShape).background(bg).clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) { Icon(icon, label, tint = fg, modifier = Modifier.size(if (small) 22.dp else 26.dp)) }
+}
+
+/** Choosing how the screen is sent before the system asks to start recording it. */
+@Composable
+private fun ShareQualityDialog(controller: CallController, onShare: () -> Unit, onCancel: () -> Unit) {
+    var picked by remember { mutableStateOf(controller.shareQuality) }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("Share your screen") },
+        text = {
+            Column {
+                for (q in CallController.ShareQuality.entries) {
+                    Row(Modifier.fillMaxWidth().clickable { picked = q }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        androidx.compose.material3.RadioButton(selected = picked == q, onClick = { picked = q })
+                        Column(Modifier.padding(start = 8.dp)) {
+                            Text(q.label, style = MaterialTheme.typography.bodyLarge)
+                            Text(q.note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = { controller.shareQuality = picked; onShare() }) { Text("Share") } },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = onCancel) { Text("Cancel") } },
+    )
 }

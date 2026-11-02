@@ -1,6 +1,6 @@
 # Ember
 
-Native Android messenger for a [Hearth server](https://github.com/modnite/hearth-server). Kotlin, Jetpack Compose, Material 3. Package `org.hearth.ember`, minSdk 26, targetSdk 35. Current version: 1.6.1.
+Native Android messenger for a [Hearth server](https://github.com/modnite/hearth-server). Kotlin, Jetpack Compose, Material 3. Package `org.hearth.ember`, minSdk 26, targetSdk 35. Current version: 1.7.0.
 
 <p>
 <img src="docs/screenshots/chats.png" alt="Chats" width="24%">
@@ -124,6 +124,7 @@ Signing, releasing and testing against a scratch server are in [docs/DEVELOPMENT
 | 1.5.1 | Call notification Mute label readable on Samsung dark | Done |
 | 1.6.0 | About Ember: versions, updates, source links | Done |
 | 1.6.1 | Camera starts as left, remembered speaker route applied for real | Done |
+| 1.7.0 | Screen share quality choice (Gaming, Everyday, Sharp text) | Done |
 
 ### Open items
 

@@ -25,6 +25,7 @@ import org.hearth.ember.ui.contacts.SectionLabel
 /** Where the source of each part lives. */
 private val REPOS = listOf(
     Triple("Ember for Android", "Source code of this app", "https://github.com/modnite/ember-android"),
+    Triple("Ember web", "The page in the browser and inside the desktop app", "https://github.com/modnite/ember-web"),
     Triple("Ember for desktop", "Windows, Mac and Linux", "https://github.com/modnite/ember-desktop"),
     Triple("Hearth server", "The server Ember talks to", "https://github.com/modnite/hearth-server"),
 )

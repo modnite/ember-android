@@ -2,6 +2,10 @@
 
 One entry per release. All dates are 2026.
 
+## 1.7.0 (2 Nov)
+- Share screen asks how to send it first: Gaming (60 frames a second), Everyday (30) or Sharp text (15). The choice is remembered and sets the frame rate and bitrate of the share. Gaming is the old fixed setting; the others use less of the network.
+- The About page links to the web app's repository, now public.
+
 ## 1.6.1 (1 Nov)
 - Joining or answering a call starts with the camera the way you left it last time. Before, it was always off in the preview unless the call began as a video call.
 - The speaker or earpiece you last used is applied for real when a call connects. The button remembered it but the audio layer could still put the sound on its own choice while the call was starting, so it had to be pressed twice. The route is now asked for again as the call settles.
