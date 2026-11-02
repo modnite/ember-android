@@ -2,6 +2,9 @@
 
 One entry per release. All dates are 2026.
 
+## 1.7.2 (2 Nov)
+- The list pane beside a chat (chats, settings) is narrower: 320 dp, down from 360, on tablets, foldables and wide windows.
+
 ## 1.7.1 (2 Nov)
 - Settings sit in two columns only when the settings page itself is wide, not whenever the phone is on its side. Beside a chat (a tablet, a foldable or a freeform window) the page is narrow and two columns made every row wrap a word to a line; it is now one column there.
 - The backup notification shows real progress: a bar that fills and a percentage when a step is counting ("Reading Kitchen (3 of 12)"), and the whole step text instead of one cut-off line. The strip in the app and the backup page show the same bar. Steps with no count keep the moving bar.

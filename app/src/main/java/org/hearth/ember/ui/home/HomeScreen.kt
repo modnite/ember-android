@@ -149,7 +149,7 @@ private fun WideHome(nav: NavHostController) {
                 Spacer(Modifier.weight(1f))
             }
             Scaffold(
-                modifier = Modifier.width(360.dp).fillMaxHeight(),
+                modifier = Modifier.width(320.dp).fillMaxHeight(),
                 containerColor = MaterialTheme.colorScheme.background,
                 // The tab's own top bar already clears the status bar; counting it here too left a gap above the list.
                 contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom),
