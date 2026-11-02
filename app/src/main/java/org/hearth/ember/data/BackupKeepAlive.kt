@@ -36,11 +36,11 @@ class BackupKeepAliveService : Service() {
         if (intent?.action == ACTION_CANCEL) { app.backup.cancel(); stopSelf(); return START_NOT_STICKY }
         val now = app.backup.activity.value
         if (now == null) { stopSelf(); return START_NOT_STICKY }
-        startAs(notification(now.text))
+        startAs(notification(now))
         scope.launch {
             app.backup.activity.collect { a ->
                 if (a == null) { stopForeground(STOP_FOREGROUND_REMOVE); stopSelf() }
-                else getSystemService(NotificationManager::class.java).notify(ID, notification(a.text))
+                else getSystemService(NotificationManager::class.java).notify(ID, notification(a))
             }
         }
         return START_NOT_STICKY
@@ -52,7 +52,7 @@ class BackupKeepAliveService : Service() {
         if (Build.VERSION.SDK_INT >= 29) startForeground(ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC) else startForeground(ID, n)
     }
 
-    private fun notification(text: String): Notification {
+    private fun notification(activity: BackupActivity): Notification {
         val nm = getSystemService(NotificationManager::class.java)
         if (nm.getNotificationChannel(CHANNEL) == null) {
             nm.createNotificationChannel(NotificationChannel(CHANNEL, "Backups", NotificationManager.IMPORTANCE_LOW).apply { description = "Shown while a backup runs and the app is closed"; setShowBadge(false) })
@@ -60,8 +60,9 @@ class BackupKeepAliveService : Service() {
         val open = packageManager.getLaunchIntentForPackage(packageName)?.let { PendingIntent.getActivity(this, 0, it, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT) }
         val cancel = PendingIntent.getService(this, 1, Intent(this, BackupKeepAliveService::class.java).setAction(ACTION_CANCEL), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         return NotificationCompat.Builder(this, CHANNEL)
-            .setSmallIcon(R.drawable.ic_stat_ember).setContentTitle("Backing up Ember").setContentText(text)
-            .setOngoing(true).setOnlyAlertOnce(true).setProgress(0, 0, true).setContentIntent(open)
+            .setSmallIcon(R.drawable.ic_stat_ember).setContentTitle(if (activity.fraction != null) "Backing up Ember, ${(activity.fraction!! * 100).toInt()}%" else "Backing up Ember").setContentText(activity.text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(activity.text))
+            .setOngoing(true).setOnlyAlertOnce(true).setProgress(if (activity.total > 0) activity.total else 0, activity.done, activity.total == 0).setContentIntent(open)
             .addAction(0, "Cancel", cancel).build()
     }
 
@@ -89,8 +90,10 @@ object BackupNotice {
         val open = context.packageManager.getLaunchIntentForPackage(context.packageName)?.let { PendingIntent.getActivity(context, 0, it, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT) }
         val cancel = PendingIntent.getService(context, 1, Intent(context, BackupKeepAliveService::class.java).setAction(BackupKeepAliveService.ACTION_CANCEL), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val n = NotificationCompat.Builder(context, BackupKeepAliveService.CHANNEL)
-            .setSmallIcon(R.drawable.ic_stat_ember).setContentTitle(if (activity.restore) "Restoring Ember" else "Backing up Ember").setContentText(activity.text)
-            .setOngoing(true).setOnlyAlertOnce(true).setProgress(0, 0, true).setContentIntent(open)
+            .setSmallIcon(R.drawable.ic_stat_ember)
+            .setContentTitle((if (activity.restore) "Restoring Ember" else "Backing up Ember") + (activity.fraction?.let { ", ${(it * 100).toInt()}%" } ?: "")).setContentText(activity.text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(activity.text))
+            .setOngoing(true).setOnlyAlertOnce(true).setProgress(if (activity.total > 0) activity.total else 0, activity.done, activity.total == 0).setContentIntent(open)
             .apply { if (activity.canCancel) addAction(0, "Cancel", cancel) }.build()
         runCatching { context.getSystemService(NotificationManager::class.java).notify(BackupKeepAliveService.ID + 1, n) }
     }

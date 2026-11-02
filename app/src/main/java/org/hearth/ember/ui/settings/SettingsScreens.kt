@@ -124,7 +124,10 @@ fun SettingsTab(nav: NavHostController) {
             }
             HorizontalDivider(Modifier.padding(vertical = 4.dp))
 
-            if (wide) {
+            // Two columns only when this page itself is wide (not merely when the phone is on its side): beside a chat the page is narrow and two
+            // columns there made every row wrap a word to a line.
+            androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
+            if (maxWidth >= 640.dp) {
                 Row(Modifier.fillMaxWidth()) {
                     Column(Modifier.weight(1f)) {
                 SectionLabel("Preferences")
@@ -152,6 +155,7 @@ fun SettingsTab(nav: NavHostController) {
                     }
                 }
             } else {
+              Column(Modifier.fillMaxWidth()) {
                 SectionLabel("Preferences")
                 ActionRow(Icons.Filled.Notifications, "Notifications and sounds", "Alerts, message sound, ringtone") { nav.navigate("settings/notifications") }
                 ActionRow(Icons.Filled.DarkMode, "Appearance", "Theme, accent colour, chat wallpaper") { nav.navigate("settings/appearance") }
@@ -172,6 +176,8 @@ fun SettingsTab(nav: NavHostController) {
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 ActionRow(Icons.AutoMirrored.Filled.Logout, "Sign out", "Stops messages on this phone until you sign in again", danger = true) { signOutDialog = true }
+              }
+            }
             }
             Spacer(Modifier.height(32.dp))
         }

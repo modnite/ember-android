@@ -234,4 +234,12 @@ class BackupService(private val app: EmberApp, private val context: Context) {
 }
 
 /** A backup or a restore that is going on right now. */
-data class BackupActivity(val restore: Boolean, val text: String, val canCancel: Boolean)
+data class BackupActivity(val restore: Boolean, val text: String, val canCancel: Boolean) {
+    /** Steps done and in all, read from a step's own text ("Reading Kitchen (3 of 12)…"); 0 and 0 while the step has no count. */
+    val done: Int get() = COUNT.find(text)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+    val total: Int get() = COUNT.find(text)?.groupValues?.get(2)?.toIntOrNull() ?: 0
+    /** 0 to 1 when the step is counting, else null (the bar then just moves). */
+    val fraction: Float? get() = if (total > 0) (done.toFloat() / total).coerceIn(0f, 1f) else null
+
+    private companion object { val COUNT = Regex("""\((\d+) of (\d+)\)""") }
+}

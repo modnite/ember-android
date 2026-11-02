@@ -202,7 +202,7 @@ fun BackupRows() {
     }
     if (backingUp) {
         Text(activity?.text.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 56.dp, end = 20.dp))
-        LinearProgressIndicator(Modifier.fillMaxWidth().padding(start = 56.dp, end = 20.dp, top = 6.dp, bottom = 6.dp))
+        activity?.fraction?.let { f -> LinearProgressIndicator(progress = { f }, modifier = Modifier.fillMaxWidth().padding(start = 56.dp, end = 20.dp, top = 6.dp, bottom = 6.dp)) } ?: LinearProgressIndicator(Modifier.fillMaxWidth().padding(start = 56.dp, end = 20.dp, top = 6.dp, bottom = 6.dp))
         Row(Modifier.fillMaxWidth().padding(start = 48.dp, end = 20.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text("It keeps going through the app, and in the background if you leave it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f).padding(start = 8.dp))
             TextButton(onClick = { BackupScheduler.cancel(context) }) { Text("Cancel backup") }
