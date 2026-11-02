@@ -2,6 +2,10 @@
 
 One entry per release. All dates are 2026.
 
+## 1.6.1 (1 Nov)
+- Joining or answering a call starts with the camera the way you left it last time. Before, it was always off in the preview unless the call began as a video call.
+- The speaker or earpiece you last used is applied for real when a call connects. The button remembered it but the audio layer could still put the sound on its own choice while the call was starting, so it had to be pressed twice. The route is now asked for again as the call settles.
+
 ## 1.6.0 (1 Nov)
 - About Ember (Settings, About): this app's version, the server's name and version, the update check, and links to the source of the Android app, the desktop app and the server.
 

@@ -239,9 +239,11 @@ class CallController(private val app: EmberApp) {
         // The speaker or the earpiece you last chose is where the next call starts; with nothing chosen yet, a video call starts on the speaker.
         wantSpeaker = if (viewPrefs.contains("speaker")) viewPrefs.getBoolean("speaker", false) else video
         val lenses = Lenses.list(app)
+        // A video call starts with the camera on. Joining or answering starts the way the camera was left last time (on or off).
+        val camWanted = video || (viewPrefs.contains("cam") && viewPrefs.getBoolean("cam", false))
         _state.value = CallState(
             phase = Phase.Lobby, roomId = roomId, title = room0?.title(app.repo.me.value?.id ?: "") ?: "Call", video = video,
-            micOn = true, camOn = video && lenses.isNotEmpty(), lenses = lenses, lens = lenses.firstOrNull { it.front } ?: lenses.firstOrNull(),
+            micOn = true, camOn = camWanted && lenses.isNotEmpty(), lenses = lenses, lens = lenses.firstOrNull { it.front } ?: lenses.firstOrNull(),
             ringing = false,
         )
         ensureRoom()
@@ -323,6 +325,8 @@ class CallController(private val app: EmberApp) {
     }
 
     fun toggleCamera() {
+        // What the person chose is remembered for the next call, even if the camera fails to start this time.
+        viewPrefs.edit().putBoolean("cam", !_state.value.camOn).apply()
         if (_state.value.camOn) {
             // Off: stop capturing so the camera light goes out, and stop publishing.
             stopCamera()
@@ -476,6 +480,10 @@ class CallController(private val app: EmberApp) {
                 CallService.start(app)
                 refreshOutputs()
                 applyDefaultRoute()
+                // The audio layer is still starting up when the first route is asked for and can put the sound back on its own choice, which
+                // left the button saying speaker (or earpiece) while the sound came from the other one until it was pressed twice. The
+                // remembered route is asked for again as the call settles.
+                app.scope.launch { for (wait in listOf(700L, 1500L, 3500L)) { delay(wait); if (room === r && _state.value.phase == Phase.Connected) enforceRoute() } }
                 push()
                 startHeartbeat(roomId)
             } catch (e: Exception) {
@@ -483,6 +491,19 @@ class CallController(private val app: EmberApp) {
                 _state.update { it.copy(phase = Phase.Failed, error = e.message ?: "Could not connect the call.") }
                 runCatching { app.realtime.leaveCall(roomId) }
             }
+        }
+    }
+
+    /** Put the sound where the person last had it (a headset wins), if it is somewhere else. */
+    private fun enforceRoute() {
+        val list = audio.availableAudioDevices
+        if (list.isEmpty()) return
+        val headset = list.firstOrNull { it is AudioDevice.BluetoothHeadset } ?: list.firstOrNull { it is AudioDevice.WiredHeadset }
+        val target = headset ?: if (wantSpeaker) list.firstOrNull { it is AudioDevice.Speakerphone } else list.firstOrNull { it is AudioDevice.Earpiece }
+        if (target != null && audio.selectedAudioDevice?.name != target.name) {
+            telecomRoute(target)
+            audio.selectDevice(target)
+            refreshOutputs()
         }
     }
 
