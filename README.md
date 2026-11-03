@@ -127,7 +127,7 @@ Signing, releasing and testing against a scratch server are in [docs/DEVELOPMENT
 | 1.7.0 | Screen share quality choice (Gaming, Everyday, Sharp text) | Done |
 | 1.7.1 | Settings one column in a narrow page, backup notification progress | Done |
 | 1.7.2 | Narrower list pane beside a chat | Done |
-| 1.8.0 | Call lifecycle/audio, share stage and backup progress fixes | Built; real-phone media verification pending |
+| 1.8.0 | Call lifecycle/audio, share stage and backup progress fixes | Published; real-phone media verification pending |
 
 ### Open items
 
