@@ -1,6 +1,6 @@
 # Ember
 
-Native Android messenger for a [Hearth server](https://github.com/modnite/hearth-server). Kotlin, Jetpack Compose, Material 3. Package `org.hearth.ember`, minSdk 26, targetSdk 35. Current version: 1.8.0.
+Native Android messenger for a [Hearth server](https://github.com/modnite/hearth-server). Kotlin, Jetpack Compose, Material 3. Package `org.hearth.ember`, minSdk 26, targetSdk 35. Current version: 1.8.1.
 
 <p>
 <img src="docs/screenshots/chats.png" alt="Chats" width="24%">
@@ -128,6 +128,7 @@ Signing, releasing and testing against a scratch server are in [docs/DEVELOPMENT
 | 1.7.1 | Settings one column in a narrow page, backup notification progress | Done |
 | 1.7.2 | Narrower list pane beside a chat | Done |
 | 1.8.0 | Call lifecycle/audio, share stage and backup progress fixes | Published; real-phone media verification pending |
+| 1.8.1 | Speaking borders, per-room audio and bounded receive recovery | Published; real-device interruption outcome unverified |
 
 ### Open items
 
@@ -146,3 +147,4 @@ Signing, releasing and testing against a scratch server are in [docs/DEVELOPMENT
 ## Credits
 
 Nothing is copied from other messengers. Element X Android (AGPL) was read for patterns. If code from an AGPL project is ever copied in, Ember has to be released under the AGPL.
+

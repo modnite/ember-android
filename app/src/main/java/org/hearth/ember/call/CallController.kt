@@ -180,6 +180,7 @@ class CallController(private val app: EmberApp) {
     val mutedForMe = MutableStateFlow<Set<String>>(emptySet())
     fun toggleMuteFor(identity: String) {
         mutedForMe.update { if (identity in it) it - identity else it + identity }
+        checkRemoteAudio("local playback choice")
         rebuild()
     }
 
@@ -217,11 +218,15 @@ class CallController(private val app: EmberApp) {
 
     var room: Room? = null
         private set
-    private val audio = AudioSwitchHandler(app)
+    private var audio = AudioSwitchHandler(app)
     private var capturer: LensCapturer? = null
     private var cameraTrack: LocalVideoTrack? = null
     private var job: Job? = null
     private var connectJob: Job? = null
+    private var receiveJob: Job? = null
+    private val receiveHealth = ReceiveHealth()
+    private val repairing = mutableSetOf<String>()
+    private val lastSpeech = mutableMapOf<String, Long>()
     private var heartbeat: Job? = null
     private var video = true
     private val telecom = TelecomBridge(app)
@@ -253,6 +258,8 @@ class CallController(private val app: EmberApp) {
 
     private fun ensureRoom(): Room {
         room?.let { return it }
+        // A released room owns/stops its handler. Never share it with a rejoin.
+        audio = AudioSwitchHandler(app)
         audio.preferredDeviceList = listOf(
             com.twilio.audioswitch.AudioDevice.BluetoothHeadset::class.java,
             com.twilio.audioswitch.AudioDevice.WiredHeadset::class.java,
@@ -470,6 +477,7 @@ class CallController(private val app: EmberApp) {
         val roomId = s.roomId ?: return
         if (s.phase != Phase.Lobby) return
         _state.update { it.copy(phase = Phase.Connecting, error = null) }
+        CallService.start(app)
         val live = app.repo.calls.value[roomId]
         when {
             answer -> app.realtime.acceptCall(roomId)
@@ -487,7 +495,8 @@ class CallController(private val app: EmberApp) {
                     provider.setSharedKey(shared)
                 }
                 r.connect(token.url, token.token)
-                audio.registerAudioDeviceChangeListener { _, _ -> refreshOutputs(); applyDefaultRoute() }
+                val roomAudio = audio
+                roomAudio.registerAudioDeviceChangeListener { _, _ -> if (room === r && audio === roomAudio) { refreshOutputs(); applyDefaultRoute() } }
                 if (_state.value.micOn && !r.localParticipant.setMicrophoneEnabled(true)) {
                     _state.update { it.copy(micOn = false, error = "The microphone could not start. Check its permission or rejoin the call.") }
                 }
@@ -517,6 +526,37 @@ class CallController(private val app: EmberApp) {
                 app.scope.launch { for (wait in listOf(700L, 1500L, 3500L)) { delay(wait); if (room === r && _state.value.phase == Phase.Connected) enforceRoute() } }
                 push()
                 startHeartbeat(roomId)
+                receiveJob?.cancel()
+                receiveJob = app.scope.launch {
+                    while (isActive && room === r) {
+                        delay(3_000)
+                        for (p in r.remoteParticipants.values.toList()) {
+                            val pub = p.getTrackPublication(Track.Source.MICROPHONE) as? io.livekit.android.room.track.RemoteTrackPublication ?: continue
+                            val track = pub.track as? io.livekit.android.room.track.RemoteAudioTrack ?: continue
+                            val report = try { track.getRTCStats() } catch (e: kotlinx.coroutines.CancellationException) {
+                                throw e
+                            } catch (_: Exception) { null } ?: continue
+                            if (room !== r) return@launch
+                            val now = android.os.SystemClock.elapsedRealtime()
+                            val recentSpeech = p.isSpeaking || lastSpeech[p.identity?.value]?.let { now - it < 1_500 } == true
+                            val bytes = report.statsMap.values.filter { it.type == "inbound-rtp" }.sumOf { (it.members["bytesReceived"] as? Number)?.toLong() ?: 0L }
+                            val eligible = recentSpeech && !pub.muted && p.identity?.value !in mutedForMe.value
+                            if (receiveHealth.stalled(pub.sid, bytes, eligible, now)) {
+                                repairing.add(pub.sid)
+                                try {
+                                    Log.w("Call", "repair stalled receiver ${pub.sid}: remote speech with no received-byte progress")
+                                    pub.setSubscribed(false)
+                                    delay(250)
+                                    if (room === r && p.getTrackPublication(Track.Source.MICROPHONE) === pub) pub.setSubscribed(true)
+                                } catch (e: kotlinx.coroutines.CancellationException) {
+                                    throw e
+                                } catch (e: Exception) {
+                                    Log.w("Call", "receiver repair failed for ${pub.sid}", e)
+                                } finally { repairing.remove(pub.sid) }
+                            }
+                        }
+                    }
+                }
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 Log.w("Call", "connect failed", e)
@@ -597,6 +637,8 @@ class CallController(private val app: EmberApp) {
         val roomId = s.roomId
         connectJob?.cancel()
         connectJob = null
+        receiveJob?.cancel(); receiveJob = null
+        receiveHealth.clear(); repairing.clear(); lastSpeech.clear()
         heartbeat?.cancel()
         stopBattery()
         telecom.end()
@@ -635,12 +677,18 @@ class CallController(private val app: EmberApp) {
         for (p in r.remoteParticipants.values) {
             val pub = p.getTrackPublication(Track.Source.MICROPHONE) as? io.livekit.android.room.track.RemoteTrackPublication ?: continue
             android.util.Log.i("Call", "voice of ${p.identity?.value}: $reason, subscribed=${pub.subscribed}, track=${pub.track != null}, muted=${pub.muted}")
-            if (!pub.subscribed) runCatching { pub.setSubscribed(true) }
+            if (!pub.subscribed && pub.sid !in repairing) runCatching { pub.setSubscribed(true) }
             (pub.track as? io.livekit.android.room.track.RemoteAudioTrack)?.let { runCatching { it.setVolume(if (p.identity?.value in mutedForMe.value) 0.0 else 1.0) } }
         }
     }
 
     private fun onEvent(event: RoomEvent) {
+        if (event.room !== room) return
+        if (event is RoomEvent.ActiveSpeakersChanged) {
+            val now = android.os.SystemClock.elapsedRealtime()
+            for (p in event.speakers) p.identity?.value?.let { lastSpeech[it] = now }
+        }
+        if (event is RoomEvent.Reconnected) { receiveHealth.clear(); checkRemoteAudio("reconnected") }
         if (event is RoomEvent.TrackE2EEStateEvent) android.util.Log.d("EmberE2EE", "track ${event.publication.sid} ${event.participant.identity} -> ${event.state}")
         when (event) {
             is RoomEvent.Disconnected -> if (_state.value.phase == Phase.Connected) {
@@ -686,11 +734,7 @@ class CallController(private val app: EmberApp) {
                 screenRatio = screen?.dimensions?.let { if (it.width > 0 && it.height > 0) it.width.toFloat() / it.height else null } ?: (16f / 9f),
             )
         }
-        // The volume of everyone's voice follows the "mute for me" choices (a track that arrives later is caught on the next event).
-        for (p in r.remoteParticipants.values) {
-            val track = p.getTrackPublication(Track.Source.MICROPHONE)?.track as? io.livekit.android.room.track.RemoteAudioTrack ?: continue
-            runCatching { track.setVolume(if (p.identity?.value in mutedForMe.value) 0.0 else 1.0) }
-        }
+        // Volume is applied on track events and user choices, not every speaker-level update.
         val people = listOf(person(r.localParticipant, true)) + r.remoteParticipants.values.map { person(it, false) }
         // The floating window shows the speaker's (or first) camera: take that picture's shape.
         val shown = r.remoteParticipants.values.firstOrNull { it.isSpeaking && it.getTrackPublication(Track.Source.CAMERA)?.track != null }

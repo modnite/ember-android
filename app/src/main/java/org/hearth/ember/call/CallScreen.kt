@@ -644,7 +644,7 @@ private fun Grid(controller: CallController, people: List<CallPerson>, landscape
  * (or a tap on the picture) switches between fitting it and filling the tile.
  */
 @Composable
-private fun PersonTile(controller: CallController, p: CallPerson, modifier: Modifier, big: Boolean, ring: Boolean = false, forceFit: Boolean = false) {
+private fun PersonTile(controller: CallController, p: CallPerson, modifier: Modifier, big: Boolean, ring: Boolean = true, forceFit: Boolean = false) {
     val app = LocalContext.current.ember
     val mirrorSelf by app.prefs.mirrorSelfPicture.collectAsState()
     val user = app.repo.users.collectAsState().value[p.userId]
