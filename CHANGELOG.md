@@ -2,6 +2,11 @@
 
 One entry per release. All dates are 2026.
 
+## 1.9.0 (3 Nov)
+- First launch offers theme and accent choices with a live preview and an optional Skip. Existing installations keep their preferences.
+- Your speaking indicator follows the existing local microphone capture samples, with a 250 ms release hold and immediate mute gating, instead of depending on server speaking reports. No audio is retained.
+- Restore one-to-one label layout: speaking borders are independent from the group-name-label flag.
+
 ## 1.8.1 (3 Nov)
 - Restore speaking borders in one-to-one and shared-screen layouts.
 - Each call room owns its Android audio handler; old-room callbacks cannot modify a rejoin.

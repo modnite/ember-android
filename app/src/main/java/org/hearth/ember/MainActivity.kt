@@ -81,12 +81,21 @@ class MainActivity : ComponentActivity() {
                 ThemeMode.Light -> false
                 ThemeMode.Dark, ThemeMode.Black -> true
             }
+            androidx.compose.runtime.SideEffect {
+                androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).apply {
+                    isAppearanceLightStatusBars = !dark
+                    isAppearanceLightNavigationBars = !dark
+                }
+            }
             EmberTheme(dark = dark, dynamic = dynamic, accent = accent, black = mode == ThemeMode.Black) {
                 val overlays = remember { org.hearth.ember.ui.chat.OverlayHost() }
                 androidx.compose.runtime.CompositionLocalProvider(org.hearth.ember.ui.chat.LocalOverlayHost provides overlays) {
                     androidx.compose.material3.Surface(color = androidx.compose.material3.MaterialTheme.colorScheme.background) {
                         val signedIn by app.repo.signedIn.collectAsState()
-                        if (!signedIn) LoginScreen() else EmberRoot(pendingRoom, pendingAnswer)
+                        val appearanceSetup by app.prefs.appearanceSetup.collectAsState()
+                        LaunchedEffect(signedIn) { if (signedIn && appearanceSetup) app.prefs.finishAppearanceSetup() }
+                        if (!signedIn && appearanceSetup) org.hearth.ember.ui.FirstLook()
+                        else if (!signedIn) LoginScreen() else EmberRoot(pendingRoom, pendingAnswer)
                     }
                     org.hearth.ember.ui.chat.OverlayLayers(overlays)
                 }

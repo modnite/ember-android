@@ -14,6 +14,13 @@ enum class ThemeMode { System, Light, Dark, Black }
 /** Small settings that belong to this phone: how it looks, how loud notifications are. */
 class Prefs(context: Context) {
     private val p = context.getSharedPreferences("ember_prefs", Context.MODE_PRIVATE)
+    private val _appearanceSetup = MutableStateFlow(p.getBoolean("appearanceSetupPending", p.all.isEmpty()))
+    val appearanceSetup: StateFlow<Boolean> = _appearanceSetup.asStateFlow()
+    init { if (_appearanceSetup.value) p.edit().putBoolean("appearanceSetupPending", true).apply() }
+    fun finishAppearanceSetup() {
+        p.edit().putBoolean("appearanceSetupPending", false).apply()
+        _appearanceSetup.value = false
+    }
 
     private val _theme = MutableStateFlow(ThemeMode.entries.getOrElse(p.getInt("theme", 0)) { ThemeMode.System })
     val theme: StateFlow<ThemeMode> = _theme.asStateFlow()

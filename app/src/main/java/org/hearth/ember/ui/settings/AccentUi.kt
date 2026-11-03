@@ -36,7 +36,7 @@ import androidx.compose.ui.unit.dp
 import org.hearth.ember.ember
 
 /** Ember's own orange plus a handful of others; a custom colour can be typed in as well. */
-private val Accents = listOf(
+internal val Accents = listOf(
     "Ember" to null,
     "Blue" to 0xFF2F6FED.toInt(),
     "Teal" to 0xFF0F9D8A.toInt(),

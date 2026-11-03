@@ -644,11 +644,12 @@ private fun Grid(controller: CallController, people: List<CallPerson>, landscape
  * (or a tap on the picture) switches between fitting it and filling the tile.
  */
 @Composable
-private fun PersonTile(controller: CallController, p: CallPerson, modifier: Modifier, big: Boolean, ring: Boolean = true, forceFit: Boolean = false) {
+private fun PersonTile(controller: CallController, p: CallPerson, modifier: Modifier, big: Boolean, ring: Boolean = false, forceFit: Boolean = false) {
     val app = LocalContext.current.ember
+    val callState = controller.state.collectAsState()
     val mirrorSelf by app.prefs.mirrorSelfPicture.collectAsState()
     val user = app.repo.users.collectAsState().value[p.userId]
-    val speaking = p.speaking && p.micOn
+    val speaking = p.speaking && (if (p.isLocal) callState.value.micOn else p.micOn)
     var ratio by remember(p.identity) { mutableStateOf(controller.knownRatio(p.identity)) }
     val manualFit by controller.fitMode.collectAsState()
     var tile by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
@@ -661,7 +662,7 @@ private fun PersonTile(controller: CallController, p: CallPerson, modifier: Modi
     else if (!p.isLocal) androidx.compose.runtime.SideEffect { if (p.camOn && ratio > 0f) controller.tileFit[p.identity] = fit else controller.tileFit.remove(p.identity) }
     Box(
         modifier.background(Color(0xFF241C18)).onSizeChanged { tile = it }
-            .then(if (ring && speaking) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(16.dp)) else Modifier),
+            .then(if (speaking) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(16.dp)) else Modifier),
         contentAlignment = Alignment.Center,
     ) {
         val track = p.camera
@@ -717,7 +718,6 @@ private fun PersonTile(controller: CallController, p: CallPerson, modifier: Modi
         ) { Icon(if (p.mutedByMe) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp, if (p.mutedByMe) "Hear ${p.name} again" else "Mute ${p.name} for me", tint = Color.White, modifier = Modifier.size(16.dp)) }
         // Flipping the camera lives on your own picture, as in Element Call, so the control bar stays uncrowded.
         // Only whether there is a second camera matters here, so the tile is not redrawn every time the call's state moves.
-        val callState = controller.state.collectAsState()
         val canFlip by remember { androidx.compose.runtime.derivedStateOf { callState.value.lenses.size > 1 } }
         if (p.isLocal && p.camOn && canFlip) {
             Box(

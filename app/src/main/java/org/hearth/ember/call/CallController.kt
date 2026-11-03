@@ -224,6 +224,12 @@ class CallController(private val app: EmberApp) {
     private var job: Job? = null
     private var connectJob: Job? = null
     private var receiveJob: Job? = null
+    private var microphoneActivity = MicrophoneActivity()
+    private var meterTrack: io.livekit.android.room.track.LocalAudioTrack? = null
+    private var meterSink: livekit.org.webrtc.AudioTrackSink? = null
+    private var meterJob: Job? = null
+    @Volatile private var meterGeneration = 0
+    private var localSpeaking = false
     private val receiveHealth = ReceiveHealth()
     private val repairing = mutableSetOf<String>()
     private val lastSpeech = mutableMapOf<String, Long>()
@@ -628,6 +634,7 @@ class CallController(private val app: EmberApp) {
     }
 
     fun hangup() {
+        stopMicrophoneMeter()
         fitMode.value = null
         tileFit.clear()
         mutedForMe.value = emptySet()
@@ -712,8 +719,42 @@ class CallController(private val app: EmberApp) {
         rebuild()
     }
 
+    private fun stopMicrophoneMeter() {
+        meterGeneration++
+        meterJob?.cancel(); meterJob = null
+        val sink = meterSink
+        if (sink != null) runCatching { meterTrack?.removeSink(sink) }
+        meterTrack = null; meterSink = null
+        microphoneActivity = MicrophoneActivity(); localSpeaking = false
+    }
+
+    private fun updateMicrophoneMeter(r: Room) {
+        val track = r.localParticipant.getTrackPublication(Track.Source.MICROPHONE)?.track as? io.livekit.android.room.track.LocalAudioTrack
+        if (track === meterTrack) return
+        stopMicrophoneMeter()
+        if (track == null) return
+        val generation = meterGeneration
+        val activity = microphoneActivity
+        val sink = livekit.org.webrtc.AudioTrackSink { data, bits, _, _, _, _ ->
+            if (meterGeneration == generation) activity.accept(data, bits, android.os.SystemClock.elapsedRealtime())
+        }
+        meterTrack = track; meterSink = sink
+        runCatching { track.addSink(sink) }.onFailure { stopMicrophoneMeter(); return }
+        meterJob = app.scope.launch {
+            var hadSamples = false
+            while (isActive && room === r) {
+                delay(50)
+                val speaking = activity.active(android.os.SystemClock.elapsedRealtime(), _state.value.micOn && r.localParticipant.isMicrophoneEnabled)
+                if (speaking != localSpeaking || hadSamples != activity.hasSamples) {
+                    hadSamples = activity.hasSamples; localSpeaking = speaking; rebuild()
+                }
+            }
+        }
+    }
+
     private fun rebuild() {
         val r = room ?: return
+        updateMicrophoneMeter(r)
         val me = app.repo.me.value
         fun person(p: Participant, local: Boolean): CallPerson {
             val identity = p.identity?.value ?: ""
@@ -727,7 +768,7 @@ class CallController(private val app: EmberApp) {
                 isLocal = local,
                 micOn = p.isMicrophoneEnabled,
                 camOn = cam?.track != null && cam.muted.not(),
-                speaking = p.isSpeaking,
+                speaking = if (local && microphoneActivity.hasSamples) localSpeaking else p.isSpeaking,
                 camera = cam?.track as? VideoTrack,
                 screen = screen?.track as? VideoTrack,
                 mutedByMe = !local && identity in mutedForMe.value,
