@@ -12,7 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
+
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -43,7 +43,7 @@ fun ActivityLine(modifier: Modifier = Modifier) {
     a?.let {
         Column(modifier.fillMaxWidth().padding(top = 8.dp)) {
             Text(it.text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            it.fraction?.let { f -> LinearProgressIndicator(progress = { f }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) } ?: LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 4.dp))
+            it.fraction?.let { f -> BackupProgress(progress = { f }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) } ?: BackupProgress(Modifier.fillMaxWidth().padding(top = 4.dp))
         }
     }
 }
@@ -66,7 +66,7 @@ fun BackupActivityBar(activity: BackupActivity, padStatusBar: Boolean, onOpen: (
                 }
                 if (activity.canCancel) TextButton(onClick = { BackupScheduler.cancel(context) }) { Text("Cancel") }
             }
-            activity.fraction?.let { f -> LinearProgressIndicator(progress = { f }, modifier = Modifier.fillMaxWidth()) } ?: LinearProgressIndicator(Modifier.fillMaxWidth())
+            activity.fraction?.let { f -> BackupProgress(progress = { f }, modifier = Modifier.fillMaxWidth()) } ?: BackupProgress(Modifier.fillMaxWidth())
         }
     }
 }

@@ -2,6 +2,11 @@
 
 One entry per release. All dates are 2026.
 
+## 1.8.0 (3 Nov)
+- Call attempts cancel when ended; failed rooms are released before retrying. Microphone startup and mute failures are shown instead of reporting success. Missing remote audio subscriptions are checked throughout the call.
+- Screen sharing keeps all participants in a scrolling strip and lets you choose between remote shares; group grids use fewer, larger columns.
+- Backup progress uses the same continuous fill as update downloads, without a gap or end marker.
+
 ## 1.7.2 (2 Nov)
 - The list pane beside a chat (chats, settings) is narrower: 320 dp, down from 360, on tablets, foldables and wide windows.
 

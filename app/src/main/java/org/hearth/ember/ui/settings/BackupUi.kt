@@ -37,7 +37,7 @@ import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
+
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
@@ -202,14 +202,14 @@ fun BackupRows() {
     }
     if (backingUp) {
         Text(activity?.text.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 56.dp, end = 20.dp))
-        activity?.fraction?.let { f -> LinearProgressIndicator(progress = { f }, modifier = Modifier.fillMaxWidth().padding(start = 56.dp, end = 20.dp, top = 6.dp, bottom = 6.dp)) } ?: LinearProgressIndicator(Modifier.fillMaxWidth().padding(start = 56.dp, end = 20.dp, top = 6.dp, bottom = 6.dp))
+        activity?.fraction?.let { f -> BackupProgress(progress = { f }, modifier = Modifier.fillMaxWidth().padding(start = 56.dp, end = 20.dp, top = 6.dp, bottom = 6.dp)) } ?: BackupProgress(Modifier.fillMaxWidth().padding(start = 56.dp, end = 20.dp, top = 6.dp, bottom = 6.dp))
         Row(Modifier.fillMaxWidth().padding(start = 48.dp, end = 20.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text("It keeps going through the app, and in the background if you leave it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f).padding(start = 8.dp))
             TextButton(onClick = { BackupScheduler.cancel(context) }) { Text("Cancel backup") }
         }
     } else progress?.let {
         Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 56.dp, end = 20.dp))
-        LinearProgressIndicator(Modifier.fillMaxWidth().padding(start = 56.dp, end = 20.dp, top = 6.dp, bottom = 6.dp))
+        BackupProgress(Modifier.fillMaxWidth().padding(start = 56.dp, end = 20.dp, top = 6.dp, bottom = 6.dp))
     }
 
     Section("Places and contents")
@@ -521,7 +521,7 @@ fun RestoreOnSignIn(server: String, username: String, password: String, onClose:
                     OutlinedTextField(url, { url = it }, singleLine = true, label = { Text("Folder address") })
                     OutlinedTextField(user, { user = it }, singleLine = true, label = { Text("Username") })
                     OutlinedTextField(davPass, { davPass = it }, singleLine = true, label = { Text("Password or app password") }, visualTransformation = PasswordVisualTransformation())
-                    if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+                    if (busy) BackupProgress(Modifier.fillMaxWidth())
                     ActivityLine()
                 }
             },

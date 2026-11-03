@@ -221,6 +221,7 @@ class CallController(private val app: EmberApp) {
     private var capturer: LensCapturer? = null
     private var cameraTrack: LocalVideoTrack? = null
     private var job: Job? = null
+    private var connectJob: Job? = null
     private var heartbeat: Job? = null
     private var video = true
     private val telecom = TelecomBridge(app)
@@ -319,7 +320,17 @@ class CallController(private val app: EmberApp) {
     fun toggleMic() {
         val on = !_state.value.micOn
         _state.update { it.copy(micOn = on) }
-        if (_state.value.phase == Phase.Connected) app.scope.launch { runCatching { room?.localParticipant?.setMicrophoneEnabled(on) }; push() }
+        if (_state.value.phase == Phase.Connected) app.scope.launch {
+            runCatching {
+                val participant = room?.localParticipant ?: error("The call has disconnected.")
+                check(participant.setMicrophoneEnabled(on)) { "Could not change the microphone. Check the connection and microphone permission." }
+            }.onSuccess {
+                _state.update { s -> s.copy(error = null) }
+            }.onFailure {
+                _state.update { s -> s.copy(micOn = !on, error = it.message ?: "Could not change the microphone.") }
+            }
+            push()
+        }
         // The call notification says Mute or Unmute to match.
         if (_state.value.phase == Phase.Connected || _state.value.phase == Phase.Connecting) CallService.start(app)
     }
@@ -465,7 +476,7 @@ class CallController(private val app: EmberApp) {
             live == null -> app.realtime.startCall(roomId)
         }
         app.callNotifier.stop(roomId)
-        app.scope.launch {
+        connectJob = app.scope.launch {
             try {
                 val token = app.api.callToken(roomId, app.store.deviceId)
                 val r = ensureRoom()
@@ -477,7 +488,9 @@ class CallController(private val app: EmberApp) {
                 }
                 r.connect(token.url, token.token)
                 audio.registerAudioDeviceChangeListener { _, _ -> refreshOutputs(); applyDefaultRoute() }
-                r.localParticipant.setMicrophoneEnabled(_state.value.micOn)
+                if (_state.value.micOn && !r.localParticipant.setMicrophoneEnabled(true)) {
+                    _state.update { it.copy(micOn = false, error = "The microphone could not start. Check its permission or rejoin the call.") }
+                }
                 if (_state.value.camOn) publishCamera()
                 app.realtime.joinCall(roomId)
                 _state.update { it.copy(phase = Phase.Connected, startedAt = live?.startedAt ?: System.currentTimeMillis(), ringing = live == null) }
@@ -505,7 +518,10 @@ class CallController(private val app: EmberApp) {
                 push()
                 startHeartbeat(roomId)
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 Log.w("Call", "connect failed", e)
+                // A failed room must not be reused by the next attempt.
+                hangup()
                 _state.update { it.copy(phase = Phase.Failed, error = e.message ?: "Could not connect the call.") }
                 runCatching { app.realtime.leaveCall(roomId) }
             }
@@ -553,6 +569,7 @@ class CallController(private val app: EmberApp) {
         heartbeat = app.scope.launch {
             while (isActive) {
                 sendState(roomId)
+                checkRemoteAudio("heartbeat")
                 delay(10_000)
             }
         }
@@ -578,6 +595,8 @@ class CallController(private val app: EmberApp) {
         val s = _state.value
         val wasInCall = s.phase == Phase.Connected || s.phase == Phase.Connecting
         val roomId = s.roomId
+        connectJob?.cancel()
+        connectJob = null
         heartbeat?.cancel()
         stopBattery()
         telecom.end()

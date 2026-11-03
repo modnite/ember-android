@@ -11,6 +11,9 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -371,7 +374,9 @@ private fun InCall(controller: CallController, state: CallState, pip: Boolean, o
         val data = r.data
         if (r.resultCode == Activity.RESULT_OK && data != null) controller.startScreen(data)
     }
-    val sharer = others.firstOrNull { it.screen != null }
+    var selectedShare by remember { mutableStateOf<String?>(null) }
+    val sharer = others.firstOrNull { it.identity == selectedShare && it.screen != null }
+        ?: others.firstOrNull { it.screen != null }
     var shareChoice by remember { mutableStateOf(false) }
     if (shareChoice) ShareQualityDialog(controller, onShare = { shareChoice = false; shareLauncher.launch(context.getSystemService(android.media.projection.MediaProjectionManager::class.java).createScreenCaptureIntent()) }, onCancel = { shareChoice = false })
 
@@ -384,12 +389,17 @@ private fun InCall(controller: CallController, state: CallState, pip: Boolean, o
     Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures(onDoubleTap = { if (sharer == null && others.size <= 1) swapped = !swapped }, onTap = { controls = !controls }) }) {
         when {
             pip -> PipContent(controller, state, others, me)
-            sharer != null -> ScreenStage(controller, sharer, listOf(sharer) + others.filter { it !== sharer } + listOfNotNull(me), landscape)
+            sharer != null -> ScreenStage(controller, sharer, listOf(sharer) + others.filter { it !== sharer } + listOfNotNull(me), landscape) { selectedShare = it.identity }
             others.size <= 1 -> OneToOne(controller, state, others.firstOrNull(), me, swapped, landscape, onSwap = { swapped = !swapped })
             else -> Grid(controller, state.people, landscape)
         }
 
         if (!pip) BatteryBanner(state, Modifier.align(Alignment.TopCenter))
+        if (!pip && state.error != null) Text(
+            state.error, color = Color.White, style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 60.dp, start = 12.dp, end = 12.dp)
+                .background(Color(0xFF6B2920), RoundedCornerShape(8.dp)).padding(10.dp),
+        )
 
         if (!pip) {
             AnimatedVisibility(controls, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.align(Alignment.TopCenter)) {
@@ -520,7 +530,7 @@ private fun produceNow(): androidx.compose.runtime.State<Long> = androidx.compos
 
 /** Someone is sharing their screen: it fills the window uncropped, with the people in small pictures along the edge. */
 @Composable
-private fun ScreenStage(controller: CallController, sharer: CallPerson, rest: List<CallPerson>, landscape: Boolean) {
+private fun ScreenStage(controller: CallController, sharer: CallPerson, rest: List<CallPerson>, landscape: Boolean, onSelectShare: (CallPerson) -> Unit) {
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         // The shared screen is sized to its own shape and centred, so the whole of it shows with bars around it instead of being zoomed to fill.
         val screen: @Composable (Modifier) -> Unit = { modifier ->
@@ -533,8 +543,8 @@ private fun ScreenStage(controller: CallController, sharer: CallPerson, rest: Li
         if (landscape) {
             // On its side the people stand in a column beside the screen, so nothing sits on top of it.
             Row(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))) {
-                Column(Modifier.fillMaxHeight().width(82.dp).padding(start = 10.dp, top = 64.dp, bottom = 56.dp), verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterVertically)) {
-                    for (p in rest.take(3)) PersonTile(controller, p, Modifier.size(64.dp).clip(RoundedCornerShape(12.dp)), big = false)
+                Column(Modifier.fillMaxHeight().width(82.dp).padding(start = 10.dp, top = 64.dp, bottom = 56.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    for (p in rest) PersonTile(controller, p, Modifier.size(64.dp).clip(RoundedCornerShape(12.dp)), big = false)
                 }
                 screen(Modifier.weight(1f).fillMaxHeight())
             }
@@ -542,10 +552,10 @@ private fun ScreenStage(controller: CallController, sharer: CallPerson, rest: Li
             screen(Modifier.fillMaxSize())
             Row(
                 Modifier.align(Alignment.TopEnd).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal.plus(WindowInsetsSides.Top)))
-                    .padding(top = 64.dp, start = 10.dp, end = 10.dp),
+                    .padding(top = 64.dp, start = 10.dp, end = 10.dp).horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                for (p in rest.take(4)) PersonTile(controller, p, Modifier.width(72.dp).aspectRatio(0.75f).clip(RoundedCornerShape(12.dp)), big = false)
+                for (p in rest) PersonTile(controller, p, Modifier.width(72.dp).aspectRatio(0.75f).clip(RoundedCornerShape(12.dp)), big = false)
             }
         }
         Text(
@@ -553,6 +563,11 @@ private fun ScreenStage(controller: CallController, sharer: CallPerson, rest: Li
             modifier = Modifier.align(Alignment.BottomStart).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)).padding(12.dp)
                 .clip(RoundedCornerShape(14.dp)).background(Color.Black.copy(alpha = 0.5f)).padding(horizontal = 10.dp, vertical = 4.dp),
         )
+        Row(Modifier.align(Alignment.BottomEnd).padding(bottom = 70.dp).horizontalScroll(rememberScrollState())) {
+            for (p in rest.filter { !it.isLocal && it.screen != null }) {
+                TextButton(onClick = { onSelectShare(p) }) { Text(p.name + "'s screen", color = Color.White) }
+            }
+        }
     }
 }
 
@@ -605,7 +620,7 @@ private fun Waiting(state: CallState) {
 private fun Grid(controller: CallController, people: List<CallPerson>, landscape: Boolean) {
     val chosenFit by controller.fitMode.collectAsState()
     androidx.compose.runtime.SideEffect { controller.shownFit.value = controller.gridFit() }
-    val columns = if (landscape) (if (people.size <= 3) people.size else if (people.size <= 8) 4 else 5) else if (people.size <= 4) 2 else 3
+    val columns = if (landscape) (if (people.size <= 6) 3 else 4) else 2
     val rows = (people.size + columns - 1) / columns
     Column(
         Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal.plus(WindowInsetsSides.Top)))
