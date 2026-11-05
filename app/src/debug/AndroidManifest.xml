@@ -1,5 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application>
         <activity android:name="org.hearth.ember.ProgressReviewActivity" android:exported="true" />
+        <activity android:name="org.hearth.ember.CallReviewActivity" android:exported="true" android:supportsPictureInPicture="true" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout" />
     </application>
+    <instrumentation android:name="org.hearth.ember.PipResizeReview" android:targetPackage="org.hearth.ember.debug" />
 </manifest>

@@ -2,6 +2,11 @@
 
 One entry per release. All dates are 2026.
 
+## 1.10.0 (5 Nov)
+- In-app floating calls match the web card: fitted picture, title and timer, mute, return and hang-up controls. Camera-off calls remain available. Drag position is retained.
+- Fit is the default for all participant pictures; Fill remains an explicit choice.
+- External PiP uses matching microphone, muted microphone and hang-up vector icons instead of mismatched legacy system artwork.
+
 ## 1.9.0 (3 Nov)
 - First launch offers theme and accent choices with a live preview and an optional Skip. Existing installations keep their preferences.
 - Your speaking indicator follows the existing local microphone capture samples, with a 250 ms release hold and immediate mute gating, instead of depending on server speaking reports. No audio is retained.

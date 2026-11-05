@@ -653,10 +653,8 @@ private fun PersonTile(controller: CallController, p: CallPerson, modifier: Modi
     var ratio by remember(p.identity) { mutableStateOf(controller.knownRatio(p.identity)) }
     val manualFit by controller.fitMode.collectAsState()
     var tile by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
-    val tileRatio = if (tile.height > 0) tile.width.toFloat() / tile.height else 1f
-    val autoFit = ratio > 0f && (ratio > 1f) != (tileRatio > 1f)
-    // Your own small picture always fills its little window; every other picture fits or fills as chosen (by itself: whole when the shapes differ).
-    val fit = forceFit || (if (p.isLocal && !big) false else (manualFit ?: autoFit))
+    // Every picture starts fitted; Fill is an explicit choice.
+    val fit = forceFit || (manualFit ?: true)
     // The big picture of someone else tells the call controls what is showing.
     if (big) androidx.compose.runtime.SideEffect { controller.shownFit.value = fit }
     else if (!p.isLocal) androidx.compose.runtime.SideEffect { if (p.camOn && ratio > 0f) controller.tileFit[p.identity] = fit else controller.tileFit.remove(p.identity) }
@@ -782,39 +780,72 @@ private fun PipContent(controller: CallController, state: CallState, others: Lis
  */
 @Composable
 fun CallMini(controller: CallController, state: CallState, modifier: Modifier = Modifier, onOpen: () -> Unit) {
-    val person = rememberFocus(state.people.filter { !it.isLocal }, needCamera = true) ?: return
-    val ratio = controller.knownRatio(person.identity).takeIf { it > 0f } ?: 0.56f
-    val landscapePicture = ratio > 1f
-    val tileW = if (landscapePicture) 150.dp else 96.dp
-    val tileH = (tileW.value / ratio).dp.coerceIn(80.dp, 190.dp)
-    androidx.compose.foundation.layout.BoxWithConstraints(modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(8.dp)) {
+    val others = state.people.filter { !it.isLocal }
+    val active = rememberFocus(others, needCamera = false)
+    val person = others.firstOrNull { it.screen != null } ?: active ?: state.people.firstOrNull()
+    val now by produceNow()
+    BoxWithConstraints(modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(start = 12.dp, top = 8.dp, end = 12.dp, bottom = 76.dp)) {
+        val tileW = 168.dp.coerceAtMost(maxWidth)
+        val pictureHeight = (maxHeight * 0.34f).coerceIn(80.dp, 224.dp)
         val density = androidx.compose.ui.platform.LocalDensity.current
-        val roomX = with(density) { (maxWidth - tileW).toPx() }.coerceAtLeast(1f)
-        val roomY = with(density) { (maxHeight - tileH).toPx() }.coerceAtLeast(1f)
+        val roomX = with(density) { (maxWidth - tileW).toPx() }.coerceAtLeast(0f)
+        val roomY = with(density) { (maxHeight - pictureHeight - 60.dp).toPx() }.coerceAtLeast(0f)
         val pos by controller.miniPos.collectAsState()
-        Box(
-            Modifier
-                .offset { androidx.compose.ui.unit.IntOffset((pos.x * roomX).roundToInt(), (pos.y * roomY).roundToInt()) }
-                .size(tileW, tileH)
-                .clip(RoundedCornerShape(14.dp)).border(1.5.dp, Color.White.copy(alpha = 0.4f), RoundedCornerShape(14.dp)).background(Color.Black)
-                .pointerInput(Unit) { detectTapGestures { onOpen() } }
-                .pointerInput(roomX, roomY) {
+        MiniCallCard(state, pictureHeight,
+            Modifier.offset { androidx.compose.ui.unit.IntOffset((pos.x * roomX).roundToInt(), (pos.y * roomY).roundToInt()) }
+                .width(tileW).pointerInput(roomX, roomY) {
                     detectDragGestures(
                         onDrag = { change, amount ->
                             change.consume()
                             val p = controller.miniPos.value
-                            controller.miniPos.value = androidx.compose.ui.geometry.Offset((p.x + amount.x / roomX).coerceIn(0f, 1f), (p.y + amount.y / roomY).coerceIn(0f, 1f))
+                            controller.miniPos.value = androidx.compose.ui.geometry.Offset(
+                                if (roomX > 0) (p.x + amount.x / roomX).coerceIn(0f, 1f) else 0f,
+                                if (roomY > 0) (p.y + amount.y / roomY).coerceIn(0f, 1f) else 0f,
+                            )
                         },
-                        onDragEnd = { controller.saveMiniPos() },
-                        onDragCancel = { controller.saveMiniPos() },
+                        onDragEnd = { controller.saveMiniPos() }, onDragCancel = { controller.saveMiniPos() },
                     )
                 },
+            if (state.phase == Phase.Connected) callTimer(now - state.startedAt) else "Connecting…",
+            onOpen, controller::toggleMic, controller::hangup,
         ) {
-            key(person.camera) { VideoView(controller.room, person.camera, Modifier.fillMaxSize(), fill = true, onRatio = { controller.noteFrame(person.identity, it) }) }
-            if (!person.micOn) Box(Modifier.align(Alignment.BottomStart).padding(4.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.55f)).padding(4.dp)) {
-                Icon(Icons.Filled.MicOff, null, tint = Color(0xFFFF8A80), modifier = Modifier.size(12.dp))
+            val track = person?.screen ?: person?.camera?.takeIf { person.camOn }
+            if (track != null) key(track) { VideoView(controller.room, track, Modifier.fillMaxSize(), fill = false) }
+            else {
+                val user = LocalContext.current.ember.repo.users.collectAsState().value[person?.userId]
+                Avatar(person?.name ?: state.title, user?.avatar, user?.let { parseColor(it.avatarColor) } ?: Color.Gray, 56.dp)
             }
         }
+    }
+}
+
+/** In-app card; Android's external PiP controls remain system-owned. */
+@Composable
+internal fun MiniCallCard(
+    state: CallState, pictureHeight: androidx.compose.ui.unit.Dp, modifier: Modifier = Modifier,
+    time: String, onOpen: () -> Unit, onMute: () -> Unit, onEnd: () -> Unit,
+    picture: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit,
+) {
+    Column(modifier.clip(RoundedCornerShape(18.dp)).background(EmberTheme.colors.callBackground)) {
+        Box(Modifier.fillMaxWidth().height(pictureHeight).background(Color(0xFF241C18)).clickable(onClickLabel = "Return to the call", onClick = onOpen), contentAlignment = Alignment.Center) {
+            picture()
+            Text("${state.title.ifBlank { "Call" }} · $time", color = Color.White, style = MaterialTheme.typography.labelMedium,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.align(Alignment.BottomStart).padding(6.dp).clip(RoundedCornerShape(10.dp)).background(Color.Black.copy(alpha = 0.55f)).padding(horizontal = 8.dp, vertical = 2.dp))
+        }
+        Row(Modifier.fillMaxWidth().padding(8.dp), horizontalArrangement = Arrangement.SpaceAround) {
+            MiniCallButton(if (state.micOn) Icons.Filled.Mic else Icons.Filled.MicOff, if (state.micOn) "Mute" else "Unmute", onMute, selected = !state.micOn)
+            MiniCallButton(Icons.Filled.Fullscreen, "Return to the call", onOpen)
+            MiniCallButton(Icons.Filled.CallEnd, "Leave the call", onEnd, danger = true)
+        }
+    }
+}
+
+@Composable
+private fun MiniCallButton(icon: ImageVector, label: String, onClick: () -> Unit, selected: Boolean = false, danger: Boolean = false) {
+    IconButton(onClick = onClick, modifier = Modifier.size(44.dp).clip(CircleShape).background(
+        if (danger) EmberTheme.colors.callDanger else if (selected) Color.White else Color.White.copy(alpha = 0.14f))) {
+        Icon(icon, label, tint = if (selected && !danger) Color(0xFF14100E) else Color.White, modifier = Modifier.size(22.dp))
     }
 }
 

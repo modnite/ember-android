@@ -185,9 +185,9 @@ class CallController(private val app: EmberApp) {
     }
 
     /** How other people's pictures are drawn: null = by themselves (whole picture when its shape does not match the window), true = whole picture, false = filling the window. */
-    val fitMode = MutableStateFlow<Boolean?>(null)
+    val fitMode = MutableStateFlow<Boolean?>(true)
     /** What is on screen right now, so the button can say what a press will do. */
-    val shownFit = MutableStateFlow(false)
+    val shownFit = MutableStateFlow(true)
     /** In a group each tile fits or fills by itself until the button is pressed: what each tile shows now, so the button reflects the tiles and not just the last choice. */
     val tileFit = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
     fun gridFit(): Boolean = fitMode.value ?: tileFit.values.any { it }
@@ -635,7 +635,7 @@ class CallController(private val app: EmberApp) {
 
     fun hangup() {
         stopMicrophoneMeter()
-        fitMode.value = null
+        fitMode.value = true
         tileFit.clear()
         mutedForMe.value = emptySet()
         frameRatios.clear()
@@ -823,8 +823,8 @@ class CallController(private val app: EmberApp) {
             return RemoteAction(Icon.createWithResource(context, icon), label, label, pending)
         }
         val micOn = _state.value.micOn
-        actions += action(1, ACTION_MUTE, if (micOn) "Mute" else "Unmute", if (micOn) android.R.drawable.ic_btn_speak_now else android.R.drawable.ic_lock_silent_mode)
-        actions += action(2, ACTION_HANGUP, "End call", android.R.drawable.ic_menu_close_clear_cancel)
+        actions += action(1, ACTION_MUTE, if (micOn) "Mute" else "Unmute", if (micOn) R.drawable.pip_mic else R.drawable.pip_mic_off)
+        actions += action(2, ACTION_HANGUP, "End call", R.drawable.pip_call_end)
         builder.setActions(actions)
         if (Build.VERSION.SDK_INT >= 31) builder.setAutoEnterEnabled(_state.value.phase == Phase.Connected)
         return builder.build()
